@@ -33,7 +33,8 @@ def mock_config_entry() -> ConfigEntry:
         },
         options={
             "update_interval": 5,
-            "historical_days": 14,
+            "historical_months": 3,
+            "historical_data_imported": True,
         },
         entry_id="mock_entry_id",
         source="user",
@@ -70,6 +71,8 @@ def mock_oura_api_data() -> dict[str, Any]:
                     "latency": 600,                 # 10 minutes
                     "time_in_bed": 30600,           # 8.5 hours
                     "average_hrv": 45,
+                    "bedtime_start": "2024-01-15T23:30:00+00:00",
+                    "bedtime_end": "2024-01-16T07:30:00+00:00",
                     "average_heart_rate": 61.125,
                     "lowest_heart_rate": 55,
                 }

@@ -53,6 +53,7 @@ def test_process_sleep_scores():
 
 def test_process_sleep_details_with_durations():
     """Test processing of sleep detail data with duration conversions."""
+    from datetime import datetime, timezone
     coordinator = MockCoordinator()
     data = {
         "sleep_detail": {
@@ -68,6 +69,8 @@ def test_process_sleep_details_with_durations():
                     "average_hrv": 45,
                     "average_heart_rate": 61.125,
                     "lowest_heart_rate": 55,
+                    "bedtime_start": "2024-01-15T23:30:00+00:00",
+                    "bedtime_end": "2024-01-16T07:30:00+00:00",
                 }
             ]
         }
@@ -85,9 +88,10 @@ def test_process_sleep_details_with_durations():
     assert processed["average_sleep_hrv"] == 45
     assert processed["lowest_sleep_heart_rate"] == 55.0
     assert processed["average_sleep_heart_rate"] == 61.125
-    assert processed["average_sleep_hrv"] == 45
     assert processed["deep_sleep_percentage"] == 25.0
     assert processed["rem_sleep_percentage"] == 25.0
+    assert processed["bedtime_start"] == datetime(2024, 1, 15, 23, 30, 0, tzinfo=timezone.utc)
+    assert processed["bedtime_end"] == datetime(2024, 1, 16, 7, 30, 0, tzinfo=timezone.utc)
 
 
 def test_process_sleep_details_low_battery_alert():

@@ -10,6 +10,7 @@ ATTRIBUTION: Final = "Data provided by Oura Ring"
 # Configuration
 CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_HISTORICAL_MONTHS: Final = "historical_months"
+CONF_HISTORICAL_DATA_IMPORTED: Final = "historical_data_imported"
 
 # OAuth2 Constants
 OAUTH2_AUTHORIZE: Final = "https://cloud.ouraring.com/oauth/authorize"
@@ -55,6 +56,8 @@ SENSOR_TYPES: Final = {
     "deep_sleep_percentage": {"name": "Deep Sleep Percentage", "icon": "mdi:percent", "unit": "%", "device_class": None, "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC},
     "rem_sleep_percentage": {"name": "REM Sleep Percentage", "icon": "mdi:percent", "unit": "%", "device_class": None, "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC},
     "time_in_bed": {"name": "Time in Bed", "icon": "mdi:bed-clock", "unit": "h", "device_class": "duration", "state_class": "total", "entity_category": None},
+    "bedtime_start": {"name": "Bedtime Start", "icon": "mdi:sleep", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None},
+    "bedtime_end": {"name": "Bedtime End", "icon": "mdi:sleep-off", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None},
     "low_battery_alert": {"name": "Low Battery Alert", "icon": "mdi:battery-alert", "unit": None, "device_class": None, "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC},
     "lowest_sleep_heart_rate": {"name": "Lowest Sleep Heart Rate", "icon": "mdi:heart-minus", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": None},
     "average_sleep_heart_rate": {"name": "Average Sleep Heart Rate", "icon": "mdi:heart", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": None},

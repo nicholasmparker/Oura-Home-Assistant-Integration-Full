@@ -56,10 +56,10 @@ def _get_unit_class(unit: str | None) -> str | None:
 
 # Statistics metadata for all Oura sensors
 STATISTICS_METADATA = {
-    "sleep_score": {"name": "Sleep Score", "unit": "score", "has_mean": True, "has_sum": False},
-    "sleep_efficiency": {"name": "Sleep Efficiency", "unit": "score", "has_mean": True, "has_sum": False},
-    "restfulness": {"name": "Restfulness", "unit": "score", "has_mean": True, "has_sum": False},
-    "sleep_timing": {"name": "Sleep Timing", "unit": "score", "has_mean": True, "has_sum": False},
+    "sleep_score": {"name": "Sleep Score", "unit": None, "has_mean": True, "has_sum": False},
+    "sleep_efficiency": {"name": "Sleep Efficiency", "unit": "%", "has_mean": True, "has_sum": False},
+    "restfulness": {"name": "Restfulness", "unit": "%", "has_mean": True, "has_sum": False},
+    "sleep_timing": {"name": "Sleep Timing", "unit": None, "has_mean": True, "has_sum": False},
     "total_sleep_duration": {"name": "Total Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
     "deep_sleep_duration": {"name": "Deep Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
     "rem_sleep_duration": {"name": "REM Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
@@ -67,6 +67,8 @@ STATISTICS_METADATA = {
     "awake_time": {"name": "Awake Time", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
     "sleep_latency": {"name": "Sleep Latency", "unit": UnitOfTime.MINUTES, "has_mean": True, "has_sum": False},
     "time_in_bed": {"name": "Time in Bed", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
+    "bedtime_start": {"name": "Bedtime Start", "unit": None, "has_mean": False, "has_sum": False},
+    "bedtime_end": {"name": "Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
     "deep_sleep_percentage": {"name": "Deep Sleep Percentage", "unit": "%", "has_mean": True, "has_sum": False},
     "rem_sleep_percentage": {"name": "REM Sleep Percentage", "unit": "%", "has_mean": True, "has_sum": False},
     "average_sleep_hrv": {"name": "Average Sleep HRV", "unit": "ms", "has_mean": True, "has_sum": False},
@@ -74,16 +76,16 @@ STATISTICS_METADATA = {
     "average_sleep_heart_rate": {"name": "Average Sleep Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "readiness_score": {"name": "Readiness Score", "unit": "score", "has_mean": True, "has_sum": False},
     "temperature_deviation": {"name": "Temperature Deviation", "unit": UnitOfTemperature.CELSIUS, "has_mean": True, "has_sum": False},
-    "resting_heart_rate": {"name": "Resting Heart Rate Score", "unit": "score", "has_mean": True, "has_sum": False},
-    "hrv_balance": {"name": "HRV Balance Score", "unit": "score", "has_mean": True, "has_sum": False},
-    "activity_score": {"name": "Activity Score", "unit": "score", "has_mean": True, "has_sum": False},
+    "resting_heart_rate": {"name": "Resting Heart Rate Score", "unit": None, "has_mean": True, "has_sum": False},
+    "hrv_balance": {"name": "HRV Balance Score", "unit": None, "has_mean": True, "has_sum": False},
+    "activity_score": {"name": "Activity Score", "unit": None, "has_mean": True, "has_sum": False},
     "steps": {"name": "Steps", "unit": "steps", "has_mean": False, "has_sum": True},
     "active_calories": {"name": "Active Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "total_calories": {"name": "Total Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "target_calories": {"name": "Target Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": True, "has_sum": False},
-    "met_min_high": {"name": "High Activity MET Minutes", "unit": "METâ‹…min", "has_mean": False, "has_sum": True},
-    "met_min_medium": {"name": "Medium Activity MET Minutes", "unit": "METâ‹…min", "has_mean": False, "has_sum": True},
-    "met_min_low": {"name": "Low Activity MET Minutes", "unit": "METâ‹…min", "has_mean": False, "has_sum": True},
+    "met_min_high": {"name": "High Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
+    "met_min_medium": {"name": "Medium Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
+    "met_min_low": {"name": "Low Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
     "average_heart_rate": {"name": "Average Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "min_heart_rate": {"name": "Minimum Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "max_heart_rate": {"name": "Maximum Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
@@ -91,9 +93,9 @@ STATISTICS_METADATA = {
     "recovery_high_duration": {"name": "Recovery High Duration", "unit": UnitOfTime.MINUTES, "has_mean": True, "has_sum": False},
     "stress_day_summary": {"name": "Stress Day Summary", "unit": None, "has_mean": False, "has_sum": False},
     "resilience_level": {"name": "Resilience Level", "unit": None, "has_mean": False, "has_sum": False},
-    "sleep_recovery_score": {"name": "Sleep Recovery Score", "unit": "score", "has_mean": True, "has_sum": False},
-    "daytime_recovery_score": {"name": "Daytime Recovery Score", "unit": "score", "has_mean": True, "has_sum": False},
-    "stress_resilience_score": {"name": "Stress Resilience Score", "unit": "score", "has_mean": True, "has_sum": False},
+    "sleep_recovery_score": {"name": "Sleep Recovery Score", "unit": None, "has_mean": True, "has_sum": False},
+    "daytime_recovery_score": {"name": "Daytime Recovery Score", "unit": None, "has_mean": True, "has_sum": False},
+    "stress_resilience_score": {"name": "Stress Resilience Score", "unit": None, "has_mean": True, "has_sum": False},
     "spo2_average": {"name": "SpO2 Average", "unit": "%", "has_mean": True, "has_sum": False},
     "breathing_disturbance_index": {"name": "Breathing Disturbance Index", "unit": None, "has_mean": True, "has_sum": False},
     "vo2_max": {"name": "VO2 Max", "unit": "ml/kg/min", "has_mean": True, "has_sum": False},
@@ -124,6 +126,8 @@ DATA_SOURCE_CONFIG = {
             {"sensor_key": "average_sleep_hrv", "api_path": "average_hrv"},
             {"sensor_key": "lowest_sleep_heart_rate", "api_path": "lowest_heart_rate"},
             {"sensor_key": "average_sleep_heart_rate", "api_path": "average_heart_rate"},
+            {"sensor_key": "bedtime_start", "api_path": "bedtime_start", "transform": "iso_to_datetime"},
+            {"sensor_key": "bedtime_end", "api_path": "bedtime_end", "transform": "iso_to_datetime"},
         ],
         "computed": [
             {
@@ -487,6 +491,14 @@ def _apply_transformation(value: Any, transform: str, **kwargs) -> Any:
     elif transform == "percentage":
         total = kwargs.get("total", 100)
         return (value / total) * 100 if total else 0
+    elif transform == "iso_to_datetime":
+        # Parse ISO datetime string to datetime object
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                return None
+        return value
 
     return value
 

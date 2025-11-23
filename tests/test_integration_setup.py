@@ -17,6 +17,8 @@ def test_config_entry_fixture(mock_config_entry: ConfigEntry):
     assert "token" in mock_config_entry.data
     assert mock_config_entry.data["token"]["access_token"] == "mock_access_token"
     assert mock_config_entry.options["update_interval"] == 5
+    assert mock_config_entry.options["historical_months"] == 3
+    assert mock_config_entry.options["historical_data_imported"] is True
     assert mock_config_entry.unique_id == "mock_unique_id"
 
 

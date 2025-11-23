@@ -80,8 +80,26 @@ def test_value_transformations():
     # Test percentage calculation
     assert _apply_transformation(30, "percentage", total=100) == 30.0
     
+    # Test ISO to datetime
+    iso_str = "2024-01-15T08:30:00+00:00"
+    dt = _apply_transformation(iso_str, "iso_to_datetime")
+    assert dt is not None
+    assert dt.year == 2024
+    assert dt.month == 1
+    assert dt.day == 15
+    assert dt.hour == 8
+    assert dt.minute == 30
+    assert dt.tzinfo == timezone.utc
+
+    # Test ISO to datetime with Z
+    iso_str_z = "2024-01-15T08:30:00Z"
+    dt_z = _apply_transformation(iso_str_z, "iso_to_datetime")
+    assert dt_z is not None
+    assert dt_z.hour == 8
+    assert dt_z.tzinfo == timezone.utc
+    
     # Test no transformation
-    assert _apply_transformation(42, None) == 42
+    assert _apply_transformation(42, "unknown") == 42
 
 
 def test_compute_percentage():

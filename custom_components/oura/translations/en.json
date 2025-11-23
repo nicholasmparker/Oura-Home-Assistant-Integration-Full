@@ -20,11 +20,13 @@
         "description": "Configure how often Oura Ring data is fetched and how many months of historical data to load on first setup.",
         "data": {
           "update_interval": "Update interval (minutes)",
-          "historical_months": "Historical months to load (1-48, only applies on first setup)"
+          "historical_months": "Historical months to load (1-48, only applies on first setup)",
+          "historical_data_imported": "Historical data already imported"
         },
         "data_description": {
           "update_interval": "How often to fetch new data from Oura API (1-60 minutes)",
-          "historical_months": "Number of months of historical data to import as statistics when first adding the integration (1-48 months, up to 4 years)"
+          "historical_months": "Number of months of historical data to import on first setup or when re-importing (1-48 months, up to 4 years)",
+          "historical_data_imported": "Toggle OFF to re-import historical data on next restart (will fetch the configured number of months). WARNING: This will trigger a full historical data import!"
         }
       }
     }
@@ -44,6 +46,8 @@
       "deep_sleep_percentage": {"name": "Deep sleep percentage"},
       "rem_sleep_percentage": {"name": "REM sleep percentage"},
       "time_in_bed": {"name": "Time in bed"},
+      "bedtime_start": {"name": "Bedtime start"},
+      "bedtime_end": {"name": "Bedtime end"},
       "readiness_score": {"name": "Readiness score"},
       "temperature_deviation": {"name": "Temperature deviation"},
       "resting_heart_rate": {"name": "Resting heart rate score"},
