@@ -33,7 +33,8 @@ def mock_config_entry() -> ConfigEntry:
         },
         options={
             "update_interval": 5,
-            "historical_days": 14,
+            "historical_months": 3,
+            "historical_data_imported": True,
         },
         entry_id="mock_entry_id",
         source="user",
