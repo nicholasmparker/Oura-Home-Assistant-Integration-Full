@@ -74,7 +74,7 @@ STATISTICS_METADATA = {
     "average_sleep_hrv": {"name": "Average Sleep HRV", "unit": "ms", "has_mean": True, "has_sum": False},
     "lowest_sleep_heart_rate": {"name": "Lowest Sleep Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "average_sleep_heart_rate": {"name": "Average Sleep Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
-    "readiness_score": {"name": "Readiness Score", "unit": "score", "has_mean": True, "has_sum": False},
+    "readiness_score": {"name": "Readiness Score", "unit": None, "has_mean": True, "has_sum": False},
     "temperature_deviation": {"name": "Temperature Deviation", "unit": UnitOfTemperature.CELSIUS, "has_mean": True, "has_sum": False},
     "resting_heart_rate": {"name": "Resting Heart Rate Score", "unit": None, "has_mean": True, "has_sum": False},
     "hrv_balance": {"name": "HRV Balance Score", "unit": None, "has_mean": True, "has_sum": False},
