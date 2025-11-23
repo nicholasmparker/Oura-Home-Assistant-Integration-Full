@@ -14,6 +14,7 @@ from .const import (
     OAUTH2_SCOPES,
     CONF_UPDATE_INTERVAL,
     CONF_HISTORICAL_MONTHS,
+    CONF_HISTORICAL_DATA_IMPORTED,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_HISTORICAL_MONTHS,
     MIN_UPDATE_INTERVAL,
@@ -100,6 +101,12 @@ class OuraOptionsFlowHandler(config_entries.OptionsFlow):
                         vol.Coerce(int),
                         vol.Range(min=MIN_HISTORICAL_MONTHS, max=MAX_HISTORICAL_MONTHS),
                     ),
+                    vol.Optional(
+                        CONF_HISTORICAL_DATA_IMPORTED,
+                        default=self.config_entry.options.get(
+                            CONF_HISTORICAL_DATA_IMPORTED, True
+                        ),
+                    ): bool,
                 }
             ),
         )
