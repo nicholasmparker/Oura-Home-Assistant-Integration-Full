@@ -10,6 +10,7 @@ ATTRIBUTION: Final = "Data provided by Oura Ring"
 # Configuration
 CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_HISTORICAL_MONTHS: Final = "historical_months"
+CONF_HISTORICAL_DATA_IMPORTED: Final = "historical_data_imported"
 
 # OAuth2 Constants
 OAUTH2_AUTHORIZE: Final = "https://cloud.ouraring.com/oauth/authorize"

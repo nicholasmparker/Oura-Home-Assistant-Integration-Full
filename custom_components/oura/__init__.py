@@ -13,6 +13,7 @@ from .const import (
     DOMAIN,
     CONF_UPDATE_INTERVAL,
     CONF_HISTORICAL_MONTHS,
+    CONF_HISTORICAL_DATA_IMPORTED,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_HISTORICAL_MONTHS,
 )
@@ -48,12 +49,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
     coordinator = OuraDataUpdateCoordinator(hass, api_client, entry, update_interval)
 
-    # Check if this is the first setup (no historical data loaded yet)
-    # We'll use a flag stored in hass.data to track this
-    hass.data.setdefault(DOMAIN, {})
-    is_first_setup = entry.entry_id not in hass.data[DOMAIN]
+    # Check if historical data has been imported (persistent flag in config entry options)
+    # This flag survives restarts and prevents re-importing on every HA restart
+    historical_data_imported = entry.options.get(CONF_HISTORICAL_DATA_IMPORTED, False)
     
-    if is_first_setup:
+    if not historical_data_imported:
         # Get historical months from options, or use default
         historical_months = entry.options.get(CONF_HISTORICAL_MONTHS, DEFAULT_HISTORICAL_MONTHS)
         # Convert months to days (approximate: 30 days per month)
@@ -64,13 +64,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Load historical data before first refresh
         try:
             await coordinator.async_load_historical_data(historical_days)
+            
+            # Mark historical data as imported in config entry options
+            # This persists across restarts
+            new_options = {**entry.options, CONF_HISTORICAL_DATA_IMPORTED: True}
+            hass.config_entries.async_update_entry(entry, options=new_options)
+            _LOGGER.info("Historical data import complete - flag saved to prevent re-import")
         except Exception as err:
             _LOGGER.error("Failed to load historical data: %s", err)
             # Continue anyway - regular updates will still work
+    else:
+        _LOGGER.debug("Historical data already imported - skipping")
     
     # Do the first refresh (or subsequent refreshes)
     await coordinator.async_config_entry_first_refresh()
 
+    hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

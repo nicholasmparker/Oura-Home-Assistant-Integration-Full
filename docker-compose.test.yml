@@ -5,7 +5,9 @@ services:
     volumes:
       - ./custom_components:/config/custom_components
       - ./tests:/config/tests
+      - ./requirements_test.txt:/config/requirements_test.txt
+      - ./pytest.ini:/config/pytest.ini
     working_dir: /config
-    command: python -m pytest tests/ -v
+    command: sh -c "pip install -r requirements_test.txt && python -m pytest tests/ -v"
     environment:
       - PYTHONPATH=/config
