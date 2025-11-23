@@ -174,10 +174,10 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 - Secure credential storage
 
 ### Data Collection 
-- Sleep data (13 sensors)
+- Sleep data (16 sensors)
 - Readiness data (4 sensors)
 - Activity data (8 sensors)
-- Heart Rate data (4 sensors)
+- Heart Rate data (6 sensors)
 - HRV data (1 sensor)
 - Stress data (3 sensors)
 - Resilience data (4 sensors)
@@ -185,7 +185,7 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 - VO2 Max data (1 sensor)
 - Cardiovascular Age data (1 sensor)
 - Sleep Time data (2 sensors)
-- Total: 43 sensors
+- Total: 48 sensors
 
 ### Modern Architecture 
 - DataUpdateCoordinator pattern with specialized processing methods
@@ -204,7 +204,7 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 - Version tracking
 
 ### Test Coverage 
-- 39 passing tests across 5 test modules
+- 45 passing tests across 5 test modules
 - Comprehensive pytest fixtures
 - Docker-based testing with HA 2025.11
 - Fast execution (~0.14 seconds)
@@ -212,7 +212,7 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 
 ## Sensor Categories
 
-### Sleep Sensors (13)
+### Sleep Sensors (16)
 1. Sleep Score
 2. Total Sleep Duration (hours)
 3. Deep Sleep Duration (hours)
@@ -226,6 +226,9 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 11. Deep Sleep Percentage (%)
 12. REM Sleep Percentage (%)
 13. Time in Bed (hours)
+14. Bedtime Start (time)
+15. Bedtime End (time)
+16. Low Battery Alert (boolean)
 
 ### Readiness Sensors (4)
 1. Readiness Score
@@ -243,11 +246,13 @@ This is a complete, production-ready Home Assistant custom integration for Oura 
 7. Medium Activity Time (minutes)
 8. Low Activity Time (minutes)
 
-### Heart Rate Sensors (4)
+### Heart Rate Sensors (6)
 1. Current Heart Rate (bpm) - Latest reading
 2. Average Heart Rate (bpm) - Recent average
 3. Minimum Heart Rate (bpm) - Recent minimum
 4. Maximum Heart Rate (bpm) - Recent maximum
+5. Lowest Sleep Heart Rate (bpm) - Lowest heart rate during sleep
+6. Average Sleep Heart Rate (bpm) - Average heart rate during sleep
 
 ### HRV Sensors (1)
 1. Average Sleep HRV (ms) - Heart rate variability during sleep
@@ -361,7 +366,7 @@ Before deployment, verify:
 - [x] Integration can be removed cleanly
 - [x] Logs show no errors
 - [x] HACS validation passes
-- [x] All 39 automated tests pass
+- [x] All 45 automated tests pass
 - [x] Entity categories properly assigned
 - [x] Modern entity naming implemented
 - [x] Multi-account support works
@@ -388,7 +393,8 @@ After installation:
 Users can customize:
 
 - **Update interval**: Settings → Devices & Services → Oura Ring → CONFIGURE (1-60 minutes)
-- **Historical days**: Number of days of historical data to import (default: 14)
+- **Historical months**: Number of months of historical data to import (1-48, default: 3)
+- **Historical data imported**: Toggle to prevent re-importing history when changing settings
 - **Debug logging level**: configuration.yaml
 - **Entity visibility**: Hide diagnostic sensors in UI if not needed
 - **Sensor filtering**: Modify SENSOR_TYPES in const.py (advanced)
@@ -447,7 +453,7 @@ MIT License - See LICENSE file
   - **Entry-scoped unique IDs** for multi-account support
   - **51.5% code reduction** in statistics module
   - **Refactored coordinator** with 12 specialized processing methods
-  - **Comprehensive test suite** with 39 passing tests
+  - **Comprehensive test suite** with 45 passing tests
   - **Docker-based testing** infrastructure
   - **Clean logging** (removed 15+ debug statements)
   - **Improved state classes** (total, total_increasing)

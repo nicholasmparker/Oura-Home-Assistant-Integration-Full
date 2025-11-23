@@ -39,59 +39,63 @@ When creating the Oura application, select these scopes:
 - `spo2` - Blood oxygen data (Gen3 and Ring 4 only)
 - `ring_configuration` - Ring configuration information
 - `stress` - Daily stress and recovery data
+- `heart_health` - Cardiovascular health data (VO2 Max, CVA)
 
 ## Sensor Entity IDs
 
 ### Sleep Sensors
 ```
-sensor.oura_sleep_score
-sensor.oura_total_sleep_duration
-sensor.oura_deep_sleep_duration
-sensor.oura_rem_sleep_duration
-sensor.oura_light_sleep_duration
-sensor.oura_awake_time
-sensor.oura_sleep_efficiency
-sensor.oura_restfulness
-sensor.oura_sleep_latency
-sensor.oura_sleep_timing
-sensor.oura_deep_sleep_percentage
-sensor.oura_rem_sleep_percentage
-sensor.oura_time_in_bed
+sensor.oura_ring_sleep_score
+sensor.oura_ring_total_sleep_duration
+sensor.oura_ring_deep_sleep_duration
+sensor.oura_ring_rem_sleep_duration
+sensor.oura_ring_light_sleep_duration
+sensor.oura_ring_awake_time
+sensor.oura_ring_sleep_efficiency
+sensor.oura_ring_restfulness
+sensor.oura_ring_sleep_latency
+sensor.oura_ring_sleep_timing
+sensor.oura_ring_deep_sleep_percentage
+sensor.oura_ring_rem_sleep_percentage
+sensor.oura_ring_time_in_bed
+sensor.oura_ring_bedtime_start
+sensor.oura_ring_bedtime_end
+sensor.oura_ring_low_battery_alert
 ```
 
 ### Readiness Sensors
 ```
-sensor.oura_readiness_score
-sensor.oura_temperature_deviation
-sensor.oura_resting_heart_rate
-sensor.oura_hrv_balance
+sensor.oura_ring_readiness_score
+sensor.oura_ring_temperature_deviation
+sensor.oura_ring_resting_heart_rate
+sensor.oura_ring_hrv_balance
 ```
 
 ### Activity Sensors
 ```
-sensor.oura_activity_score
-sensor.oura_steps
-sensor.oura_active_calories
-sensor.oura_total_calories
-sensor.oura_target_calories
-sensor.oura_high_activity_time
-sensor.oura_medium_activity_time
-sensor.oura_low_activity_time
+sensor.oura_ring_activity_score
+sensor.oura_ring_steps
+sensor.oura_ring_active_calories
+sensor.oura_ring_total_calories
+sensor.oura_ring_target_calories
+sensor.oura_ring_high_activity_time
+sensor.oura_ring_medium_activity_time
+sensor.oura_ring_low_activity_time
 ```
 
 ### Heart Rate Sensors
 ```
-sensor.oura_current_heart_rate
-sensor.oura_average_heart_rate
-sensor.oura_min_heart_rate
-sensor.oura_max_heart_rate
-sensor.oura_lowest_sleep_heart_rate
-sensor.oura_average_sleep_heart_rate
+sensor.oura_ring_current_heart_rate
+sensor.oura_ring_average_heart_rate
+sensor.oura_ring_min_heart_rate
+sensor.oura_ring_max_heart_rate
+sensor.oura_ring_lowest_sleep_heart_rate
+sensor.oura_ring_average_sleep_heart_rate
 ```
 
 ### HRV Sensors
 ```
-sensor.oura_average_sleep_hrv
+sensor.oura_ring_average_sleep_hrv
 ```
 
 ## Common Tasks
@@ -135,6 +139,7 @@ Then restart Home Assistant.
 - **First Update**: Within 5 minutes of setup
 - **Change Interval**: Settings → Devices & Services → Oura Ring → CONFIGURE
 - **Range**: 1-60 minutes
+- **Historical Data**: Configure months (1-48) and toggle re-import
 
 ## API Endpoints Used
 
@@ -190,15 +195,15 @@ config/
 type: entities
 title: Oura Ring
 entities:
-  - entity: sensor.oura_sleep_score
+  - entity: sensor.oura_ring_sleep_score
     name: Sleep Score
-  - entity: sensor.oura_readiness_score
+  - entity: sensor.oura_ring_readiness_score
     name: Readiness Score
-  - entity: sensor.oura_activity_score
+  - entity: sensor.oura_ring_activity_score
     name: Activity Score
-  - entity: sensor.oura_steps
+  - entity: sensor.oura_ring_steps
     name: Steps Today
-  - entity: sensor.oura_total_sleep_duration
+  - entity: sensor.oura_ring_total_sleep_duration
     name: Sleep Duration
 ```
 
@@ -207,11 +212,11 @@ entities:
 type: glance
 title: Oura Scores
 entities:
-  - entity: sensor.oura_sleep_score
+  - entity: sensor.oura_ring_sleep_score
     name: Sleep
-  - entity: sensor.oura_readiness_score
+  - entity: sensor.oura_ring_readiness_score
     name: Readiness
-  - entity: sensor.oura_activity_score
+  - entity: sensor.oura_ring_activity_score
     name: Activity
 ```
 
@@ -221,16 +226,16 @@ automation:
   - alias: "Oura - Low Sleep Alert"
     trigger:
       - platform: state
-        entity_id: sensor.oura_sleep_score
+        entity_id: sensor.oura_ring_sleep_score
     condition:
       - condition: numeric_state
-        entity_id: sensor.oura_sleep_score
+        entity_id: sensor.oura_ring_sleep_score
         below: 70
     action:
       - service: notify.mobile_app
         data:
           title: "Sleep Alert"
-          message: "Your sleep score is {{ states('sensor.oura_sleep_score') }}. Consider taking it easy today."
+          message: "Your sleep score is {{ states('sensor.oura_ring_sleep_score') }}. Consider taking it easy today."
 ```
 
 ### Automation - Activity Goal Met
@@ -239,13 +244,13 @@ automation:
   - alias: "Oura - Activity Goal Met"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.oura_steps
+        entity_id: sensor.oura_ring_steps
         above: 10000
     action:
       - service: notify.mobile_app
         data:
           title: "Great Job!"
-          message: "You've reached your step goal with {{ states('sensor.oura_steps') }} steps!"
+          message: "You've reached your step goal with {{ states('sensor.oura_ring_steps') }} steps!"
 ```
 
 ### Template Sensor - Sleep Quality
@@ -255,7 +260,7 @@ template:
       - name: "Oura Sleep Quality"
         unique_id: oura_sleep_quality
         state: >
-          {% set score = states('sensor.oura_sleep_score') | int(0) %}
+          {% set score = states('sensor.oura_ring_sleep_score') | int(0) %}
           {% if score >= 85 %}
             Excellent
           {% elif score >= 70 %}

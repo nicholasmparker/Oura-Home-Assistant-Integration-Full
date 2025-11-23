@@ -63,7 +63,7 @@ We use:
 
 ### Automated Tests
 
-This project includes a comprehensive test suite with 39 tests covering all major components.
+This project includes a comprehensive test suite with 45 tests covering all major components.
 
 #### Running Tests with Docker (Recommended)
 

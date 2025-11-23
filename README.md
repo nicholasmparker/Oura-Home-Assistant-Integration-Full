@@ -7,11 +7,6 @@
 
 A modern Home Assistant custom integration for Oura Ring using the v2 API with OAuth2 authentication.
 
-> **⚠️ IMPORTANT: v2.0.0 Breaking Changes**  
-> If upgrading from v1.x.x, entity IDs changed from `sensor.oura_*` to `sensor.oura_ring_*`  
-> **To preserve historical data:** Rename your device to "Oura" after upgrading, then use "Rename entities" feature.  
-> Full migration guide: [v2.0.0 Release Notes](https://github.com/louispires/oura-v2-custom-component/releases/tag/v2.0.0)
-
 ## Features
 
 - **OAuth2 Authentication**: Secure authentication using Home Assistant's application credentials
@@ -22,7 +17,7 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 - **Multi-Account Support**: Entry-scoped unique IDs allow multiple Oura accounts
 - **HACS Compatible**: Easy installation and updates via HACS
 - **Modern Architecture**: Configuration-driven design following latest Home Assistant standards
-- **Comprehensive Testing**: 39 automated tests ensuring reliability
+- **Comprehensive Testing**: 45 automated tests ensuring reliability
 - **Efficient Updates**: Uses DataUpdateCoordinator with specialized processing methods
 
 ## Available Sensors
@@ -63,11 +58,13 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 - Medium Activity Time
 - Low Activity Time
 
-### Heart Rate Sensors (4)
+### Heart Rate Sensors (6)
 - Current Heart Rate (latest reading)
 - Average Heart Rate (from recent readings)
 - Minimum Heart Rate (from recent readings)
 - Maximum Heart Rate (from recent readings)
+- Lowest Sleep Heart Rate (lowest heart rate during sleep)
+- Average Sleep Heart Rate (average heart rate during sleep)
 
 ### HRV Sensors (1)
 - Average Sleep HRV (heart rate variability during sleep)
@@ -95,7 +92,7 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 - Optimal Bedtime Start ⚠️
 - Optimal Bedtime End ⚠️
 
-**Total: 46 sensors**
+**Total: 48 sensors**
 
 **Important Notes**:
 - Sensors marked with ⚠️ may be **unavailable** for new Oura Ring users (typically the first few weeks of usage). The Oura API does not provide data for these sensors until sufficient baseline data has been collected. This is normal behavior and they may become available over time as you continue using your ring.
@@ -179,7 +176,7 @@ automation:
   - alias: "Low Sleep Alert"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.oura_sleep_score
+        entity_id: sensor.oura_ring_sleep_score
         below: 70
     action:
       - service: notify.mobile_app
@@ -195,7 +192,8 @@ The integration polls the Oura API with a configurable update interval (default:
 2. Find "Oura Ring" and click **CONFIGURE**
 3. Set your desired update interval (1-60 minutes)
 4. Set historical data months (1-48 months, default: 3 months) - **only loaded on first setup**
-5. Click **SUBMIT**
+5. **Historical Data Imported**: Keep checked to prevent re-importing history. Uncheck to force re-import on next restart.
+6. Click **SUBMIT**
 
 The integration will automatically reload with the new interval. The default 5-minute interval is optimized to:
 - Provide timely updates
@@ -262,13 +260,13 @@ all_series_config:
     func: last
     duration: 1d
 series:
-  - entity: sensor.oura_sleep_score
+  - entity: sensor.oura_ring_sleep_score
     name: Sleep
     color: "#5E97F6"
-  - entity: sensor.oura_readiness_score
+  - entity: sensor.oura_ring_readiness_score
     name: Readiness
     color: "#FFA600"
-  - entity: sensor.oura_activity_score
+  - entity: sensor.oura_ring_activity_score
     name: Activity
     color: "#00D9FF"
 yaxis:
@@ -311,20 +309,20 @@ yaxis:
       title:
         text: Breakdown
 series:
-  - entity: sensor.oura_sleep_score
+  - entity: sensor.oura_ring_sleep_score
     name: Score
     show:
       in_chart: false
     color: white
-  - entity: sensor.oura_average_heart_rate
+  - entity: sensor.oura_ring_average_heart_rate
     name: Avg HR
     show:
       in_chart: false
-  - entity: sensor.oura_minimum_heart_rate
+  - entity: sensor.oura_ring_minimum_heart_rate
     name: Lowest HR
     show:
       in_chart: false
-  - entity: sensor.oura_time_in_bed
+  - entity: sensor.oura_ring_time_in_bed
     name: In Bed
     color: grey
     type: area
@@ -335,7 +333,7 @@ series:
     group_by:
       duration: 1d
       func: last
-  - entity: sensor.oura_total_sleep_duration
+  - entity: sensor.oura_ring_total_sleep_duration
     name: Total Sleep
     color: purple
     type: area
@@ -346,7 +344,7 @@ series:
     group_by:
       duration: 1d
       func: last
-  - entity: sensor.oura_rem_sleep_duration
+  - entity: sensor.oura_ring_rem_sleep_duration
     name: REM
     color: "#20bf6b"
     type: column
@@ -357,7 +355,7 @@ series:
     group_by:
       duration: 1d
       func: last
-  - entity: sensor.oura_deep_sleep_duration
+  - entity: sensor.oura_ring_deep_sleep_duration
     name: Deep
     color: "#45aaf2"
     type: column
@@ -368,7 +366,7 @@ series:
     group_by:
       duration: 1d
       func: last
-  - entity: sensor.oura_light_sleep_duration
+  - entity: sensor.oura_ring_light_sleep_duration
     name: Light
     color: "#fed330"
     type: column
@@ -379,7 +377,7 @@ series:
     group_by:
       duration: 1d
       func: last
-  - entity: sensor.oura_awake_time
+  - entity: sensor.oura_ring_awake_time
     name: Awake
     color: "#fc5c65"
     type: column
@@ -410,7 +408,7 @@ graph_span: 14d
 span:
   end: day
 series:
-  - entity: sensor.oura_sleep_efficiency
+  - entity: sensor.oura_ring_sleep_efficiency
     name: Efficiency
     color: '#4CAF50'
     stroke_width: 3
@@ -444,7 +442,7 @@ graph_span: 7d
 span:
   end: day
 series:
-  - entity: sensor.oura_resting_heart_rate
+  - entity: sensor.oura_ring_resting_heart_rate
     name: Resting HR
     color: "#E91E63"
     stroke_width: 2
@@ -454,7 +452,7 @@ series:
       func: last
       duration: 1d
     yaxis_id: hr
-  - entity: sensor.oura_hrv_balance
+  - entity: sensor.oura_ring_hrv_balance
     name: HRV Balance
     color: "#00BCD4"
     stroke_width: 2
@@ -464,7 +462,7 @@ series:
       func: last
       duration: 1d
     yaxis_id: hrv
-  - entity: sensor.oura_average_sleep_hrv
+  - entity: sensor.oura_ring_average_sleep_hrv
     name: Sleep HRV
     color: "#287233"
     stroke_width: 2
@@ -510,7 +508,7 @@ graph_span: 7d
 span:
   end: day
 series:
-  - entity: sensor.oura_steps
+  - entity: sensor.oura_ring_steps
     name: Steps
     color: '#4CAF50'
     stroke_width: 2
@@ -520,7 +518,7 @@ series:
       func: last
       duration: 1d
     yaxis_id: steps
-  - entity: sensor.oura_active_calories
+  - entity: sensor.oura_ring_active_calories
     name: Calories
     color: '#FF9800'
     stroke_width: 2
@@ -562,7 +560,7 @@ graph_span: 30d
 span:
   end: day
 series:
-  - entity: sensor.oura_temperature_deviation
+  - entity: sensor.oura_ring_temperature_deviation
     name: Deviation
     color: '#FF5722'
     stroke_width: 2
@@ -591,42 +589,42 @@ For a quick overview without ApexCharts:
 type: entities
 title: Oura Ring Summary
 entities:
-  - entity: sensor.oura_sleep_score
+  - entity: sensor.oura_ring_sleep_score
     secondary_info: last-changed
     name: Sleep Score
-  - entity: sensor.oura_readiness_score
+  - entity: sensor.oura_ring_readiness_score
     secondary_info: last-changed
     name: Readiness Score
-  - entity: sensor.oura_activity_score
+  - entity: sensor.oura_ring_activity_score
     secondary_info: last-changed
     name: Activity Score
   - type: divider
-  - entity: sensor.oura_total_sleep_duration
+  - entity: sensor.oura_ring_total_sleep_duration
     secondary_info: last-changed
     name: Total Sleep
-  - entity: sensor.oura_time_in_bed
+  - entity: sensor.oura_ring_time_in_bed
     name: Time in Bed
     secondary_info: last-changed
-  - entity: sensor.oura_deep_sleep_duration
+  - entity: sensor.oura_ring_deep_sleep_duration
     secondary_info: last-changed
     name: Deep Sleep
-  - entity: sensor.oura_rem_sleep_duration
+  - entity: sensor.oura_ring_rem_sleep_duration
     secondary_info: last-changed
     name: REM Sleep
   - type: divider
-  - entity: sensor.oura_steps
+  - entity: sensor.oura_ring_steps
     secondary_info: last-changed
     name: Steps Today
-  - entity: sensor.oura_active_calories
+  - entity: sensor.oura_ring_active_calories
     secondary_info: last-changed
     name: Active Calories
-  - entity: sensor.oura_current_heart_rate
+  - entity: sensor.oura_ring_current_heart_rate
     secondary_info: last-changed
-  - entity: sensor.oura_average_heart_rate
+  - entity: sensor.oura_ring_average_heart_rate
     secondary_info: last-changed
-  - entity: sensor.oura_minimum_heart_rate
+  - entity: sensor.oura_ring_minimum_heart_rate
     secondary_info: last-changed
-  - entity: sensor.oura_maximum_heart_rate
+  - entity: sensor.oura_ring_maximum_heart_rate
     secondary_info: last-changed
 ```
 </details>
@@ -642,7 +640,7 @@ Visual representation of your scores:
 type: horizontal-stack
 cards:
   - type: gauge
-    entity: sensor.oura_sleep_score
+    entity: sensor.oura_ring_sleep_score
     name: Sleep
     needle: true
     min: 0
@@ -652,7 +650,7 @@ cards:
       yellow: 70
       red: 0
   - type: gauge
-    entity: sensor.oura_readiness_score
+    entity: sensor.oura_ring_readiness_score
     name: Readiness
     needle: true
     min: 0
@@ -662,7 +660,7 @@ cards:
       yellow: 70
       red: 0
   - type: gauge
-    entity: sensor.oura_activity_score
+    entity: sensor.oura_ring_activity_score
     name: Activity
     needle: true
     min: 0
@@ -737,7 +735,7 @@ This integration is built using modern Home Assistant patterns:
 - **Type Hints**: Full type hint coverage for better code quality
 - **Async**: All operations are asynchronous
 - **Error Handling**: Comprehensive error handling and clean logging
-- **Test Coverage**: 39 automated tests with comprehensive fixtures
+- **Test Coverage**: 45 automated tests with comprehensive fixtures
 - **Code Efficiency**: 51.5% code reduction in statistics module through refactoring
 
 ## Contributing
@@ -761,7 +759,7 @@ This project is licensed under the MIT License.
 - Original Oura Component: [nitobuendia/oura-custom-component](https://github.com/nitobuendia/oura-custom-component)
 - Oura Ring API: [Oura Cloud API Documentation](https://cloud.ouraring.com/v2/docs)
 - v2.0.0 Modernization: Comprehensive refactoring to HA 2025.11 standards
-- Test Infrastructure: Docker-based testing with 39 automated tests
+- Test Infrastructure: Docker-based testing with 45 automated tests
 - Development assisted by: Claude Sonnet 4.5 (Anthropic AI)
 
 ## Sponsoring

@@ -1,5 +1,50 @@
-﻿
-**Enjoy tracking your health data with Home Assistant!** 💪
+﻿## 🎉 Oura Ring v2 Integration v2.4.0 - Enhanced Sleep & Heart Rate Metrics
+
+This release brings deeper insights into your sleep quality with new bedtime and heart rate sensors!
+
+## ✨ NEW FEATURES
+
+### New Sleep Sensors
+- **Bedtime Start**: Tracks exactly when you went to sleep
+- **Bedtime End**: Tracks exactly when you woke up
+- **Use Cases**:
+  - Automate lights or blinds based on your actual wake-up time
+  - Track sleep schedule consistency over time
+
+### New Heart Rate Sensors
+- **Lowest Sleep Heart Rate**: The lowest heart rate recorded during your sleep
+- **Average Sleep Heart Rate**: The average heart rate during your sleep
+- **Use Cases**:
+  - Monitor cardiovascular recovery during sleep
+  - Correlate resting heart rate with sleep quality
+
+### Configuration Updates
+
+- **Prevent Historical Re-import**: New option to disable historical data import on reconfiguration
+- **Use Case**: Prevents overwriting existing historical data when changing other settings or restarting Home Assistant
+
+## 🐛 BUG FIXES
+
+### Historical Data Sensor Types
+
+- **Fixed**: Incorrect sensor types for some historical data metrics
+- **Solution**: Ensure correct sensor types (e.g. duration, score) are applied during historical import
+- **Impact**: Historical data now displays with correct units and formatting in graphs
+
+## 📊 SENSOR COUNT UPDATE
+
+- **Previous version**: 44 sensors
+- **This version**: 48 sensors (+4 new sensors)
+- **Total Sleep Sensors**: 16
+- **Total Heart Rate Sensors**: 6
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ All 45 automated tests passing
+- ✅ Merged functionality from multiple development branches
+- ✅ Validated with Oura API v2
+
+---
 
 ## 🎉 Oura Ring v2 Integration v2.3.1 - Historical Data Fix
 

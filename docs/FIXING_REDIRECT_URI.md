@@ -70,6 +70,7 @@ Your Oura application should look like this:
 - ✅ spo2
 - ✅ ring_configuration
 - ✅ stress
+- ✅ heart_health
 
 ### Step 4: After Updating Oura
 

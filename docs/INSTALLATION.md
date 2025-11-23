@@ -91,6 +91,7 @@ This guide walks you through installing and configuring the Oura Ring v2 integra
    - `spo2`
    - `ring_configuration`
    - `stress`
+   - `heart_health`
 
 3. Click **Create** or **Save**
 
@@ -161,9 +162,11 @@ This guide walks you through installing and configuring the Oura Ring v2 integra
 
 1. Click on the Oura Ring integration
 2. You should see multiple entities listed:
-   - Sleep sensors (10)
+   - Sleep sensors (16)
    - Readiness sensors (4)
    - Activity sensors (8)
+   - Heart Rate sensors (6)
+   - And more (Total: 48 sensors)
 
 ### Test Data Retrieval
 
@@ -254,14 +257,15 @@ This guide walks you through installing and configuring the Oura Ring v2 integra
 
 ## Advanced Configuration
 
-### Changing Update Interval
+### Changing Update Interval & History Settings
 
 The default update interval is 5 minutes, which can be configured through the integration options:
 
 1. Go to **Settings** → **Devices & Services**
 2. Find "Oura Ring" and click **CONFIGURE**
 3. Set your desired update interval (1-60 minutes)
-4. Click **SUBMIT**
+4. Configure historical data months (1-48) and re-import behavior
+5. Click **SUBMIT**
 
 The integration will automatically reload with the new interval.
 
