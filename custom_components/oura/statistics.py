@@ -50,7 +50,7 @@ def _get_unit_class(unit: str | None) -> str | None:
         return SensorDeviceClass.ENERGY
 
     # Custom units without standard device classes
-    # These include: "bpm", "ms", "steps",
+    # These include: "score", "bpm", "ms", "steps", "MET·min",
     # "%", "ml/kg/min", "years"
     return None
 
@@ -72,7 +72,9 @@ STATISTICS_METADATA = {
     "deep_sleep_percentage": {"name": "Deep Sleep Percentage", "unit": "%", "has_mean": True, "has_sum": False},
     "rem_sleep_percentage": {"name": "REM Sleep Percentage", "unit": "%", "has_mean": True, "has_sum": False},
     "average_sleep_hrv": {"name": "Average Sleep HRV", "unit": "ms", "has_mean": True, "has_sum": False},
-    "readiness_score": {"name": "Readiness Score", "unit": None, "has_mean": True, "has_sum": False},
+    "lowest_sleep_heart_rate": {"name": "Lowest Sleep Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
+    "average_sleep_heart_rate": {"name": "Average Sleep Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
+    "readiness_score": {"name": "Readiness Score", "unit": "score", "has_mean": True, "has_sum": False},
     "temperature_deviation": {"name": "Temperature Deviation", "unit": UnitOfTemperature.CELSIUS, "has_mean": True, "has_sum": False},
     "resting_heart_rate": {"name": "Resting Heart Rate Score", "unit": None, "has_mean": True, "has_sum": False},
     "hrv_balance": {"name": "HRV Balance Score", "unit": None, "has_mean": True, "has_sum": False},
@@ -122,6 +124,8 @@ DATA_SOURCE_CONFIG = {
             {"sensor_key": "sleep_latency", "api_path": "latency", "transform": "seconds_to_minutes"},
             {"sensor_key": "time_in_bed", "api_path": "time_in_bed", "transform": "seconds_to_hours"},
             {"sensor_key": "average_sleep_hrv", "api_path": "average_hrv"},
+            {"sensor_key": "lowest_sleep_heart_rate", "api_path": "lowest_heart_rate"},
+            {"sensor_key": "average_sleep_heart_rate", "api_path": "average_heart_rate"},
             {"sensor_key": "bedtime_start", "api_path": "bedtime_start", "transform": "iso_to_datetime"},
             {"sensor_key": "bedtime_end", "api_path": "bedtime_end", "transform": "iso_to_datetime"},
         ],

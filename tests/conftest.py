@@ -73,6 +73,8 @@ def mock_oura_api_data() -> dict[str, Any]:
                     "average_hrv": 45,
                     "bedtime_start": "2024-01-15T23:30:00+00:00",
                     "bedtime_end": "2024-01-16T07:30:00+00:00",
+                    "average_heart_rate": 61.125,
+                    "lowest_heart_rate": 55,
                 }
             ]
         },
@@ -186,7 +188,7 @@ def mock_hass() -> HomeAssistant:
 def mock_coordinator_with_data(mock_config_entry):
     """Mock OuraDataUpdateCoordinator with data for testing."""
     from custom_components.oura.coordinator import OuraDataUpdateCoordinator
-    
+
     # Create a mock coordinator without full initialization
     coordinator = MagicMock(spec=OuraDataUpdateCoordinator)
     coordinator.entry = mock_config_entry
