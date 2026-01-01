@@ -39,10 +39,14 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via API."""
+        _LOGGER.debug("_async_update_data called. Last data: %s", "None" if not self.data else "Available")
         try:
             # For regular updates, only fetch 1 day of data
+            _LOGGER.debug("Calling api_client.async_get_data(days_back=1)")
             data = await self.api_client.async_get_data(days_back=1)
+            _LOGGER.debug("API returned data with keys: %s", list(data.keys()) if isinstance(data, dict) else type(data).__name__)
             processed_data = self._process_data(data)
+            _LOGGER.debug("Processed data has keys: %s", list(processed_data.keys()) if processed_data else "Empty")
 
             # Check if we got any actual data back
             # If all endpoints failed, processed_data will be empty
@@ -54,10 +58,12 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 )
                 # If we have existing data, keep it
                 if self.data:
+                    _LOGGER.debug("Keeping existing data from previous update")
                     return self.data
                 # If no existing data, this is a problem
                 raise UpdateFailed("No data available from API")
 
+            _LOGGER.debug("Update successful with %d data points", len(processed_data))
             return processed_data
 
         except Exception as err:
@@ -71,10 +77,11 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # If we have existing data, return it to keep sensors showing last known values
             if self.data:
-                _LOGGER.debug("Keeping existing data due to transient error")
+                _LOGGER.debug("Keeping existing data due to transient error: %s", type(err).__name__)
                 return self.data
 
             # If no existing data (first run), raise the error
+            _LOGGER.error("First update failed with no previous data. Raising error: %s", err)
             raise UpdateFailed(f"Error communicating with API: {err}") from err
 
     async def async_load_historical_data(self, days: int) -> None:
@@ -85,10 +92,13 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         try:
             _LOGGER.info("Loading %d days of historical data...", days)
+            _LOGGER.debug("Calling async_get_data with days_back=%d", days)
             historical_data = await self.api_client.async_get_data(days_back=days)
+            _LOGGER.debug("Historical data API call completed")
 
             # Import historical data as long-term statistics
             try:
+                _LOGGER.debug("Starting statistics import...")
                 await async_import_statistics(self.hass, historical_data, self.entry)
                 _LOGGER.info("Historical data loaded successfully")
             except Exception as stats_err:
@@ -96,13 +106,15 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise
 
             # Process and store the LATEST day's data for current sensor states
+            _LOGGER.debug("Processing latest day data from historical data...")
             processed_data = self._process_data(historical_data)
 
             # Update the coordinator's data with current information
             self.data = processed_data
             self.historical_data_loaded = True
+            _LOGGER.debug("Historical data load completed successfully")
         except Exception as err:
-            _LOGGER.error("Failed to fetch historical data: %s", err)
+            _LOGGER.error("Failed to fetch historical data: %s (Type: %s)", err, type(err).__name__)
             raise
 
     def _process_data(self, data: dict[str, Any]) -> dict[str, Any]:

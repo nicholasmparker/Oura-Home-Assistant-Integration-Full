@@ -30,28 +30,39 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Oura Ring from a config entry."""
     _LOGGER.debug("Setting up Oura Ring entry. Entry data keys: %s", list(entry.data.keys()))
+    _LOGGER.debug("Entry ID: %s", entry.entry_id)
     
     Implementation = (
         await config_entry_oauth2_flow.async_get_config_entry_implementation(
             hass, entry
         )
     )
+    _LOGGER.debug("Implementation obtained: %s", Implementation)
 
     session = config_entry_oauth2_flow.OAuth2Session(hass, entry, Implementation)
     
     # Log session state for debugging
-    _LOGGER.debug("OAuth2Session created. Valid token: %s", session.valid_token)
+    _LOGGER.debug(
+        "OAuth2Session created. Valid token: %s, Token exists: %s, Token type: %s",
+        session.valid_token,
+        session.token is not None,
+        type(session.token).__name__ if session.token else "None"
+    )
     
     # Pass the entry to the API client so it can access the token directly
     api_client = OuraApiClient(hass, session, entry)
+    _LOGGER.debug("OuraApiClient created successfully")
     
     # Get update interval from options, or use default
     update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+    _LOGGER.debug("Update interval: %d minutes", update_interval)
     coordinator = OuraDataUpdateCoordinator(hass, api_client, entry, update_interval)
+    _LOGGER.debug("OuraDataUpdateCoordinator created successfully")
 
     # Check if historical data has been imported (persistent flag in config entry options)
     # This flag survives restarts and prevents re-importing on every HA restart
     historical_data_imported = entry.options.get(CONF_HISTORICAL_DATA_IMPORTED, False)
+    _LOGGER.debug("Historical data already imported: %s", historical_data_imported)
     
     if not historical_data_imported:
         # Get historical months from options, or use default
@@ -63,6 +74,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         # Load historical data before first refresh
         try:
+            _LOGGER.debug("Starting historical data load...")
             await coordinator.async_load_historical_data(historical_days)
             
             # Mark historical data as imported in config entry options
@@ -71,22 +83,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.config_entries.async_update_entry(entry, options=new_options)
             _LOGGER.info("Historical data import complete - flag saved to prevent re-import")
         except Exception as err:
-            _LOGGER.error("Failed to load historical data: %s", err)
+            _LOGGER.error("Failed to load historical data: %s (Type: %s)", err, type(err).__name__)
             # Continue anyway - regular updates will still work
     else:
         _LOGGER.debug("Historical data already imported - skipping")
     
     # Do the first refresh (or subsequent refreshes)
+    _LOGGER.debug("Starting first coordinator refresh...")
     await coordinator.async_config_entry_first_refresh()
+    _LOGGER.debug("First coordinator refresh completed")
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
+    _LOGGER.debug("Coordinator stored in hass.data")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.debug("Platform setup forwarded")
     
     # Register update listener for options changes
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    _LOGGER.debug("Update listener registered")
 
+    _LOGGER.info("Oura Ring setup completed successfully")
     return True
 
 

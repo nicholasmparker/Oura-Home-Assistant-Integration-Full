@@ -1,4 +1,77 @@
-﻿# 🎉 Oura Ring v2 Integration v2.5.0 - Multiple Account Support
+﻿# 🎉 Oura Ring v2 Integration v2.5.1-BETA.1 - DEBUG Logging for Issue #34
+
+**⚠️ BETA VERSION**: This is a debugging build to help diagnose the "Works great until reboot" issue reported in [#34](https://github.com/louispires/oura-v2-custom-component/issues/34).
+
+## 🔍 CHANGES IN v2.5.1-BETA.1
+
+### Enhanced Debug Logging
+
+This BETA version adds comprehensive DEBUG logging throughout the integration to help identify why the integration fails after Home Assistant restarts:
+
+#### Integration Setup Logging
+- Entry setup progress and timing
+- OAuth2 session creation and token state validation
+- Historical data loading status
+- Coordinator initialization steps
+
+#### Token & OAuth2 Session Logging
+- Token validity checks before and after validation
+- Token type and structure information
+- Token refresh attempts and results
+- OAuth2 session state at setup and during updates
+
+#### API Client Logging
+- Each `async_get_data()` call with date range
+- Token state before each HTTP request
+- HTTP request details (URL and parameters)
+- HTTP response status codes
+- JSON parsing success/failure
+- Detailed error information including exception types
+
+#### Data Coordinator Logging
+- Data update cycle start/end
+- API response processing
+- Data availability checks
+- Error handling decisions
+
+### How to Use This BETA Version
+
+1. **Update to v2.5.1-BETA.1** via HACS (if available) or manually
+2. **Enable DEBUG logging for the Oura integration**:
+   - Go to **Developer Tools** → **Logs**
+   - Add this to your `configuration.yaml`:
+     ```yaml
+     logger:
+       logs:
+         custom_components.oura: debug
+         custom_components.oura.api: debug
+         custom_components.oura.coordinator: debug
+     ```
+   - Or use the **Logger** integration in the UI to enable DEBUG logs
+3. **Restart Home Assistant** to trigger the issue
+4. **Check the logs immediately** for any errors or failures
+5. **Share the DEBUG logs** in issue #34 to help diagnose the problem
+
+### What to Look For in the Logs
+
+After reboot, check for:
+- ❌ Token validation failures
+- ❌ 401 Unauthorized errors
+- ❌ Connection timeouts
+- ❌ Token refresh issues
+- ❌ OAuth2Session state changes
+
+### Reporting Feedback
+
+If you're testing this BETA version, please comment on [issue #34](https://github.com/louispires/oura-v2-custom-component/issues/34) with:
+1. Your Home Assistant version
+2. The complete DEBUG log output (from integration setup through first update failure)
+3. Whether the issue still occurs after restart
+4. Any network-related errors in your router/DNS logs
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.5.0 - Multiple Account Support
 
 This release enables support for multiple Oura Ring accounts in a single Home Assistant instance!
 
