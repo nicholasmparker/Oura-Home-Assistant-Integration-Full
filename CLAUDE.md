@@ -39,6 +39,42 @@ This file contains instructions for Claude Code when working on this Home Assist
    git push
    ```
 
+### GitHub Release Creation
+
+**CRITICAL**: After bumping the version and pushing, **ALWAYS create a GitHub release**. This is what users see as the "latest" version.
+
+```bash
+gh release create vX.Y.Z \
+  --title "vX.Y.Z - Brief Feature Description" \
+  --notes "$(cat <<'EOF'
+## 🎉 What's New in vX.Y.Z
+
+### New Sensors/Features
+- List new sensors with entity IDs
+- Describe new functionality
+
+### Technical Improvements
+- List code quality improvements
+- Performance enhancements
+- Bug fixes
+
+### Use Cases
+Provide example automations or use cases
+
+### Files Changed
+- List key modified files
+
+**Full Changelog**: https://github.com/nicholasmparker/Oura-Home-Assistant-Integration-Full/compare/vPREV...vX.Y.Z
+EOF
+)"
+```
+
+**Release Notes Template:**
+- Start with "What's New" for user-facing changes
+- Include example automations for new sensors
+- List technical improvements
+- Always include the full changelog link
+
 ## Git Commit Conventions
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
@@ -74,6 +110,7 @@ Before marking work complete:
 
 - [ ] Version bumped in `manifest.json`
 - [ ] All files committed and pushed
+- [ ] **GitHub release created** (users see this as "latest")
 - [ ] `strings.json` translations added for new entities
 - [ ] Bob code review completed
 - [ ] Critical issues from Bob's review addressed
