@@ -2,10 +2,14 @@
 from datetime import timedelta
 from typing import Final
 
+from homeassistant.const import UnitOfLength
 from homeassistant.helpers.entity import EntityCategory
 
 DOMAIN: Final = "oura"
 ATTRIBUTION: Final = "Data provided by Oura Ring"
+
+# Unit conversions
+METERS_PER_MILE: Final = 1609.344  # Precise conversion factor
 
 # Configuration
 CONF_UPDATE_INTERVAL: Final = "update_interval"
@@ -120,7 +124,7 @@ SENSOR_TYPES: Final = {
     # Workout sensors
     "workouts_today": {"name": "Workouts Today", "icon": "mdi:run", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "workout"},
     "last_workout_type": {"name": "Last Workout Type", "icon": "mdi:running", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "workout"},
-    "last_workout_distance": {"name": "Last Workout Distance", "icon": "mdi:map-marker-distance", "unit": "mi", "device_class": "distance", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+    "last_workout_distance": {"name": "Last Workout Distance", "icon": "mdi:map-marker-distance", "unit": UnitOfLength.MILES, "device_class": "distance", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
     "last_workout_calories": {"name": "Last Workout Calories", "icon": "mdi:fire", "unit": "kcal", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "workout"},
     "last_workout_intensity": {"name": "Last Workout Intensity", "icon": "mdi:speedometer", "unit": None, "device_class": "enum", "state_class": None, "entity_category": None, "options": ["easy", "moderate", "hard"], "data_category": "workout"},
     "last_workout_duration": {"name": "Last Workout Duration", "icon": "mdi:timer", "unit": "min", "device_class": "duration", "state_class": "measurement", "entity_category": None, "data_category": "workout"},

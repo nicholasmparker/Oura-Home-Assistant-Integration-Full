@@ -24,9 +24,10 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfTime,
     UnitOfEnergy,
+    UnitOfLength,
 )
 
-from .const import DOMAIN
+from .const import DOMAIN, METERS_PER_MILE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +49,8 @@ def _get_unit_class(unit: str | None) -> str | None:
         return SensorDeviceClass.TEMPERATURE
     if unit in (UnitOfEnergy.KILO_CALORIE, UnitOfEnergy.KILO_WATT_HOUR):
         return SensorDeviceClass.ENERGY
+    if unit in (UnitOfLength.MILES, UnitOfLength.KILOMETERS, UnitOfLength.METERS):
+        return SensorDeviceClass.DISTANCE
 
     # Custom units without standard device classes
     # These include: "score", "bpm", "ms", "steps", "MET·min",
@@ -105,7 +108,7 @@ STATISTICS_METADATA = {
     "optimal_bedtime_end": {"name": "Optimal Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
     # Workout statistics (aggregated daily totals, separate from "last_workout_*" real-time sensors)
     "daily_workouts": {"name": "Daily Workouts", "unit": None, "has_mean": False, "has_sum": True},
-    "daily_workout_distance": {"name": "Daily Workout Distance", "unit": "mi", "has_mean": False, "has_sum": True},
+    "daily_workout_distance": {"name": "Daily Workout Distance", "unit": UnitOfLength.MILES, "has_mean": False, "has_sum": True},
     "daily_workout_calories": {"name": "Daily Workout Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "daily_workout_duration": {"name": "Daily Workout Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
     # Session statistics (aggregated daily totals)
@@ -457,7 +460,7 @@ async def _process_workout_statistics(
         if total_distance_meters > 0:
             sensor_data["daily_workout_distance"].append({
                 "timestamp": timestamp,
-                "value": total_distance_meters / 1609.34,  # Convert meters to miles
+                "value": round(total_distance_meters / METERS_PER_MILE, 2),
             })
 
         # Sum calories

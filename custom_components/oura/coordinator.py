@@ -11,7 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import OuraApiClient
-from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL
+from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL, METERS_PER_MILE
 from .statistics import async_import_statistics
 
 _LOGGER = logging.getLogger(__name__)
@@ -368,7 +368,7 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 # Extract distance (convert from meters to miles) - 0 is valid for stationary workouts
                 if (distance := latest_workout.get("distance")) is not None:
-                    processed["last_workout_distance"] = distance / 1609.34  # Convert meters to miles
+                    processed["last_workout_distance"] = round(distance / METERS_PER_MILE, 2)
 
                 # Extract calories - 0 is valid
                 if (calories := latest_workout.get("calories")) is not None:
