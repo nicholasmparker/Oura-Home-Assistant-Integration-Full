@@ -339,13 +339,22 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if workout_data and len(workout_data) > 0:
                 # Get today's date for filtering (using HA's configured timezone)
                 today = dt_util.now().date()
+                _LOGGER.debug("Processing %d workouts. Today's date: %s", len(workout_data), today)
 
                 # Count workouts that occurred today
-                today_workouts = [
-                    w for w in workout_data
-                    if w.get("day") and datetime.fromisoformat(w["day"]).date() == today
-                ]
+                today_workouts = []
+                for w in workout_data:
+                    if day_str := w.get("day"):
+                        try:
+                            workout_date = datetime.strptime(day_str, "%Y-%m-%d").date()
+                            if workout_date == today:
+                                today_workouts.append(w)
+                        except ValueError:
+                            _LOGGER.debug("Error parsing workout day: %s", day_str)
+
                 processed["workouts_today"] = len(today_workouts)
+                _LOGGER.debug("Found %d workouts for today. Workout days: %s",
+                             len(today_workouts), [w.get("day") for w in workout_data])
 
                 # Get the most recent workout for "last_workout_*" sensors
                 latest_workout = workout_data[-1]
