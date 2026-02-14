@@ -101,6 +101,33 @@ class OuraSensor(CoordinatorEntity[OuraDataUpdateCoordinator], SensorEntity):
                 if day := workout_raw.get("day"):
                     attrs["day"] = day
 
+        # Include tag-specific attributes with enhanced tag metadata
+        if self._sensor_type == "tags_today" and self.coordinator.data:
+            # Expose tags as a list in attributes for programmatic access
+            if tags_list := self.coordinator.data.get("_tags_today_list"):
+                attrs["tags_list"] = tags_list
+
+            if latest_tag := self.coordinator.data.get("_latest_tag_entry"):
+                if timestamp := latest_tag.get("timestamp"):
+                    attrs["latest_timestamp"] = timestamp
+                if text := latest_tag.get("text"):
+                    attrs["latest_text"] = text
+
+            # Add enhanced tag metadata (tag_type_code, start_time, end_time, comment)
+            if enhanced_tags := self.coordinator.data.get("_enhanced_tags_today"):
+                attrs["enhanced_tags"] = enhanced_tags
+                attrs["enhanced_tag_count"] = len(enhanced_tags)
+
+        # Include rest mode-specific attributes
+        if self._sensor_type in ("rest_mode_start", "rest_mode_end") and self.coordinator.data:
+            if rest_mode_raw := self.coordinator.data.get("_active_rest_mode_raw"):
+                if rest_mode_id := rest_mode_raw.get("id"):
+                    attrs["id"] = rest_mode_id
+                if start_day := rest_mode_raw.get("start_day"):
+                    attrs["start_day"] = start_day
+                if end_day := rest_mode_raw.get("end_day"):
+                    attrs["end_day"] = end_day
+
         return attrs if attrs else None
 
     @property

@@ -127,6 +127,9 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._process_sleep_time(data, processed)
         self._process_workout(data, processed)
         self._process_session(data, processed)
+        self._process_tag(data, processed)
+        self._process_enhanced_tag(data, processed)
+        self._process_rest_mode(data, processed)
 
         return processed
 
@@ -430,3 +433,102 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                 # Convert total duration to minutes
                 processed["meditation_duration_today"] = total_duration / 60
+
+    def _process_tag(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process tag data (user-created tags for tracking events)."""
+        if tag_data := data.get("tag", {}).get("data"):
+            if tag_data and len(tag_data) > 0:
+                # Get today's date for filtering (using HA's configured timezone)
+                today = dt_util.now().date()
+
+                # Filter tags for today
+                today_tags = []
+                for tag_entry in tag_data:
+                    if day_str := tag_entry.get("day"):
+                        try:
+                            tag_date = datetime.strptime(day_str, "%Y-%m-%d").date()
+                            if tag_date == today:
+                                # Extract the tags list from this entry
+                                if tags := tag_entry.get("tags"):
+                                    today_tags.extend(tags)
+                        except ValueError:
+                            _LOGGER.debug("Error parsing tag day: %s", day_str)
+
+                # Remove duplicates while preserving order
+                unique_tags = list(dict.fromkeys(today_tags))
+
+                # Store as comma-separated string (HA sensor states must be string/number/date/datetime/None)
+                # The list is also stored in attributes for programmatic access
+                processed["tags_today"] = ", ".join(unique_tags) if unique_tags else ""
+                processed["_tags_today_list"] = unique_tags  # Store list for attributes
+                processed["tag_count_today"] = len(unique_tags)
+
+                # Store latest tag entry for attributes
+                if tag_data:
+                    processed["_latest_tag_entry"] = tag_data[-1]
+
+    def _process_enhanced_tag(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process enhanced tag data (provides tag_type_code, start_time, end_time, comment)."""
+        if enhanced_tag_data := data.get("enhanced_tag", {}).get("data"):
+            if enhanced_tag_data and len(enhanced_tag_data) > 0:
+                # Get today's date for filtering (using HA's configured timezone)
+                today = dt_util.now().date()
+
+                # Filter enhanced tags for today
+                today_enhanced_tags = []
+                for enhanced_tag_entry in enhanced_tag_data:
+                    if day_str := enhanced_tag_entry.get("day"):
+                        try:
+                            tag_date = datetime.strptime(day_str, "%Y-%m-%d").date()
+                            if tag_date == today:
+                                today_enhanced_tags.append(enhanced_tag_entry)
+                        except ValueError:
+                            _LOGGER.debug("Error parsing enhanced tag day: %s", day_str)
+
+                # Store enhanced tag data for sensor attributes
+                # This provides rich metadata: tag_type_code, start_time, end_time, comment
+                processed["_enhanced_tags_today"] = today_enhanced_tags
+
+    def _process_rest_mode(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process rest mode period data."""
+        # Set default to prevent stale states when API data stops arriving
+        processed["rest_mode_active"] = False
+
+        if rest_mode_data := data.get("rest_mode", {}).get("data"):
+            if rest_mode_data and len(rest_mode_data) > 0:
+                # Get current time
+                now = dt_util.now()
+
+                # Check if any rest mode period is currently active
+                is_active = False
+                active_period = None
+                active_start_time = None
+                active_end_time = None
+
+                for period in rest_mode_data:
+                    start_time_str = period.get("start_time")
+                    end_time_str = period.get("end_time")
+
+                    if start_time_str and end_time_str:
+                        try:
+                            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+
+                            # Check if current time is within this period
+                            if start_time <= now <= end_time:
+                                is_active = True
+                                active_period = period
+                                active_start_time = start_time
+                                active_end_time = end_time
+                                break
+                        except (ValueError, AttributeError) as e:
+                            _LOGGER.debug("Error parsing rest mode times: %s", e)
+
+                # Store rest mode status
+                processed["rest_mode_active"] = is_active
+
+                # Store timestamps if rest mode is active (reuse already-parsed datetimes)
+                if is_active and active_period:
+                    processed["rest_mode_start"] = active_start_time
+                    processed["rest_mode_end"] = active_end_time
+                    processed["_active_rest_mode_raw"] = active_period

@@ -33,6 +33,9 @@ API_ENDPOINTS = {
     "sleep_time": "_async_get_sleep_time",
     "workout": "_async_get_workout",
     "session": "_async_get_session",
+    "tag": "_async_get_tag",
+    "enhanced_tag": "_async_get_enhanced_tag",
+    "rest_mode": "_async_get_rest_mode",
 }
 
 
@@ -309,6 +312,57 @@ class OuraApiClient:
         or if their ring/subscription doesn't support this feature.
         """
         url = f"{API_BASE_URL}/session"
+        params = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+        try:
+            return await self._async_get(url, params)
+        except ClientResponseError as err:
+            if err.status == 401:  # Feature not available
+                return {"data": []}
+            raise
+
+    async def _async_get_tag(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
+        """Get tag data (user-created tags for tracking events).
+
+        Note: This endpoint may return 401 if the user hasn't authorized the tag scope.
+        """
+        url = f"{API_BASE_URL}/tag"
+        params = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+        try:
+            return await self._async_get(url, params)
+        except ClientResponseError as err:
+            if err.status == 401:  # Feature not available
+                return {"data": []}
+            raise
+
+    async def _async_get_enhanced_tag(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
+        """Get enhanced tag data with tag_type_code, start_time, end_time, and comment.
+
+        Note: This endpoint may return 401 if the user hasn't authorized the tag scope.
+        """
+        url = f"{API_BASE_URL}/enhanced_tag"
+        params = {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+        try:
+            return await self._async_get(url, params)
+        except ClientResponseError as err:
+            if err.status == 401:  # Feature not available
+                return {"data": []}
+            raise
+
+    async def _async_get_rest_mode(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
+        """Get rest mode period data.
+
+        Note: This endpoint may return 401 if the user hasn't authorized the required scope.
+        """
+        url = f"{API_BASE_URL}/rest_mode_period"
         params = {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),

@@ -111,6 +111,11 @@ STATISTICS_METADATA = {
     # Session statistics (aggregated daily totals)
     "daily_mindfulness_sessions": {"name": "Daily Mindfulness Sessions", "unit": None, "has_mean": False, "has_sum": True},
     "daily_meditation_duration": {"name": "Daily Meditation Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
+    # Tag statistics
+    "daily_tag_count": {"name": "Daily Tag Count", "unit": None, "has_mean": False, "has_sum": True},
+    # Rest Mode statistics
+    "daily_rest_mode_duration": {"name": "Daily Rest Mode Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
+    "daily_rest_mode_count": {"name": "Daily Rest Mode Periods", "unit": None, "has_mean": False, "has_sum": True},
 }
 
 # Configuration mapping API data sources to sensor mappings
@@ -216,6 +221,15 @@ DATA_SOURCE_CONFIG = {
     "session": {
         "custom_processor": "session",
     },
+    "tag": {
+        "custom_processor": "tag",
+    },
+    "enhanced_tag": {
+        "custom_processor": "enhanced_tag",
+    },
+    "rest_mode": {
+        "custom_processor": "rest_mode",
+    },
 }
 
 # Custom processor registry - maps processor names to functions
@@ -224,6 +238,9 @@ CUSTOM_PROCESSORS = {
     "heartrate": None,  # Will be set after function definition
     "workout": None,    # Will be set after function definition
     "session": None,    # Will be set after function definition
+    "tag": None,        # Will be set after function definition
+    "enhanced_tag": None,  # Will be set after function definition
+    "rest_mode": None,  # Will be set after function definition
 }
 
 
@@ -563,6 +580,150 @@ async def _process_session_statistics(
 
 # Register session processor
 CUSTOM_PROCESSORS["session"] = _process_session_statistics
+
+
+async def _process_tag_statistics(
+    hass: HomeAssistant,
+    tag_data: list[dict[str, Any]],
+    entry: ConfigEntry,
+) -> int:
+    """Process tag data for statistics import.
+
+    Note: Basic tag endpoint doesn't provide rich enough data for meaningful statistics.
+    Use enhanced_tag processor instead.
+    """
+    return 0
+
+
+async def _process_enhanced_tag_statistics(
+    hass: HomeAssistant,
+    enhanced_tag_data: list[dict[str, Any]],
+    entry: ConfigEntry,
+) -> int:
+    """Process enhanced tag data with daily aggregation logic.
+
+    Enhanced tags provide rich metadata (tag_type_code, start_time, end_time, comment)
+    and are aggregated by day to calculate daily tag counts.
+    """
+    stats_count = 0
+
+    # Group enhanced tags by day
+    daily_tags: dict[str, int] = {}
+
+    for tag_entry in enhanced_tag_data:
+        day = tag_entry.get("day")
+        if day:
+            if day not in daily_tags:
+                daily_tags[day] = 0
+            daily_tags[day] += 1
+
+    # Create daily statistics
+    sensor_data = {
+        "daily_tag_count": [],
+    }
+
+    for day, count in daily_tags.items():
+        timestamp = _parse_date_to_timestamp(day)
+        if not timestamp:
+            continue
+
+        sensor_data["daily_tag_count"].append({
+            "timestamp": timestamp,
+            "value": count,
+        })
+
+    # Import statistics
+    for sensor_key, data_points in sensor_data.items():
+        if data_points:
+            await _create_statistic(hass, sensor_key, data_points, entry)
+            stats_count += len(data_points)
+
+    return stats_count
+
+
+async def _process_rest_mode_statistics(
+    hass: HomeAssistant,
+    rest_mode_data: list[dict[str, Any]],
+    entry: ConfigEntry,
+) -> int:
+    """Process rest mode data with daily aggregation logic.
+
+    Rest mode periods are aggregated by day to calculate:
+    - Number of rest mode periods per day
+    - Total rest mode duration per day (in hours)
+    """
+    stats_count = 0
+
+    # Track rest mode periods that overlap with each day
+    daily_rest_mode: dict[str, dict[str, Any]] = {}
+
+    for period in rest_mode_data:
+        start_day = period.get("start_day")
+        end_day = period.get("end_day")
+        start_time = period.get("start_time")
+        end_time = period.get("end_time")
+
+        if not all([start_day, end_day, start_time, end_time]):
+            continue
+
+        try:
+            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            duration_seconds = (end_dt - start_dt).total_seconds()
+
+            # For simplicity, attribute the entire period to the start day
+            # In a more sophisticated approach, we could split multi-day periods
+            if start_day not in daily_rest_mode:
+                daily_rest_mode[start_day] = {
+                    "count": 0,
+                    "total_duration": 0,
+                }
+
+            daily_rest_mode[start_day]["count"] += 1
+            daily_rest_mode[start_day]["total_duration"] += duration_seconds
+
+        except (ValueError, AttributeError) as e:
+            _LOGGER.debug("Error parsing rest mode period: %s", e)
+            continue
+
+    # Create daily statistics
+    sensor_data = {
+        "daily_rest_mode_count": [],
+        "daily_rest_mode_duration": [],
+    }
+
+    for day, stats in daily_rest_mode.items():
+        timestamp = _parse_date_to_timestamp(day)
+        if not timestamp:
+            continue
+
+        # Count of rest mode periods
+        sensor_data["daily_rest_mode_count"].append({
+            "timestamp": timestamp,
+            "value": stats["count"],
+        })
+
+        # Total duration in hours
+        duration_hours = stats["total_duration"] / 3600
+        if duration_hours > 0:
+            sensor_data["daily_rest_mode_duration"].append({
+                "timestamp": timestamp,
+                "value": duration_hours,
+            })
+
+    # Import statistics
+    for sensor_key, data_points in sensor_data.items():
+        if data_points:
+            await _create_statistic(hass, sensor_key, data_points, entry)
+            stats_count += len(data_points)
+
+    return stats_count
+
+
+# Register tag processors
+CUSTOM_PROCESSORS["tag"] = _process_tag_statistics
+CUSTOM_PROCESSORS["enhanced_tag"] = _process_enhanced_tag_statistics
+CUSTOM_PROCESSORS["rest_mode"] = _process_rest_mode_statistics
 
 
 # Register heartrate processor

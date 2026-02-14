@@ -128,4 +128,12 @@ SENSOR_TYPES: Final = {
     # Session sensors
     "mindfulness_sessions_today": {"name": "Mindfulness Sessions Today", "icon": "mdi:meditation", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "session"},
     "meditation_duration_today": {"name": "Meditation Duration Today", "icon": "mdi:timer-sand", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "session"},
+
+    # Tag sensors
+    "tags_today": {"name": "Tags Today", "icon": "mdi:tag-multiple", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "tag"},
+    "tag_count_today": {"name": "Tag Count Today", "icon": "mdi:counter", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "tag"},
+
+    # Rest Mode timestamp sensors
+    "rest_mode_start": {"name": "Rest Mode Start", "icon": "mdi:bed-clock", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None, "data_category": "rest_mode"},
+    "rest_mode_end": {"name": "Rest Mode End", "icon": "mdi:bed-clock-outline", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None, "data_category": "rest_mode"},
 }
