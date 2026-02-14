@@ -78,6 +78,7 @@ STATISTICS_METADATA = {
     "temperature_deviation": {"name": "Temperature Deviation", "unit": UnitOfTemperature.CELSIUS, "has_mean": True, "has_sum": False},
     "resting_heart_rate": {"name": "Resting Heart Rate Score", "unit": None, "has_mean": True, "has_sum": False},
     "hrv_balance": {"name": "HRV Balance Score", "unit": None, "has_mean": True, "has_sum": False},
+    "sleep_regularity": {"name": "Sleep Regularity Score", "unit": None, "has_mean": True, "has_sum": False},
     "activity_score": {"name": "Activity Score", "unit": None, "has_mean": True, "has_sum": False},
     "steps": {"name": "Steps", "unit": "steps", "has_mean": False, "has_sum": True},
     "active_calories": {"name": "Active Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
@@ -102,6 +103,14 @@ STATISTICS_METADATA = {
     "cardiovascular_age": {"name": "Cardiovascular Age", "unit": "years", "has_mean": True, "has_sum": False},
     "optimal_bedtime_start": {"name": "Optimal Bedtime Start", "unit": None, "has_mean": False, "has_sum": False},
     "optimal_bedtime_end": {"name": "Optimal Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
+    # Workout statistics (aggregated daily totals, separate from "last_workout_*" real-time sensors)
+    "daily_workouts": {"name": "Daily Workouts", "unit": None, "has_mean": False, "has_sum": True},
+    "daily_workout_distance": {"name": "Daily Workout Distance", "unit": "m", "has_mean": False, "has_sum": True},
+    "daily_workout_calories": {"name": "Daily Workout Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
+    "daily_workout_duration": {"name": "Daily Workout Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
+    # Session statistics (aggregated daily totals)
+    "daily_mindfulness_sessions": {"name": "Daily Mindfulness Sessions", "unit": None, "has_mean": False, "has_sum": True},
+    "daily_meditation_duration": {"name": "Daily Meditation Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
 }
 
 # Configuration mapping API data sources to sensor mappings
@@ -146,6 +155,7 @@ DATA_SOURCE_CONFIG = {
             {"sensor_key": "temperature_deviation", "api_path": "temperature_deviation"},
             {"sensor_key": "resting_heart_rate", "api_path": "contributors.resting_heart_rate"},
             {"sensor_key": "hrv_balance", "api_path": "contributors.hrv_balance"},
+            {"sensor_key": "sleep_regularity", "api_path": "contributors.sleep_regularity"},
         ],
     },
     "activity": {
@@ -161,26 +171,26 @@ DATA_SOURCE_CONFIG = {
         ],
     },
     "heartrate": {
-        "custom_processor": "_process_heartrate_statistics",
+        "custom_processor": "heartrate",
     },
     "stress": {
         "mappings": [
-            {"sensor_key": "stress_high_duration", "api_path": "stress_high_duration"},
-            {"sensor_key": "recovery_high_duration", "api_path": "recovery_high_duration"},
+            {"sensor_key": "stress_high_duration", "api_path": "stress_high", "transform": "seconds_to_minutes"},
+            {"sensor_key": "recovery_high_duration", "api_path": "recovery_high", "transform": "seconds_to_minutes"},
             {"sensor_key": "stress_day_summary", "api_path": "day_summary"},
         ],
     },
     "resilience": {
         "mappings": [
             {"sensor_key": "resilience_level", "api_path": "level"},
-            {"sensor_key": "sleep_recovery_score", "api_path": "sleep_recovery_score"},
-            {"sensor_key": "daytime_recovery_score", "api_path": "daytime_recovery_score"},
-            {"sensor_key": "stress_resilience_score", "api_path": "contributors.activity_score"},
+            {"sensor_key": "sleep_recovery_score", "api_path": "contributors.sleep_recovery"},
+            {"sensor_key": "daytime_recovery_score", "api_path": "contributors.daytime_recovery"},
+            {"sensor_key": "stress_resilience_score", "api_path": "contributors.stress"},
         ],
     },
     "spo2": {
         "mappings": [
-            {"sensor_key": "spo2_average", "api_path": "average"},
+            {"sensor_key": "spo2_average", "api_path": "spo2_percentage.average"},
             {"sensor_key": "breathing_disturbance_index", "api_path": "breathing_disturbance_index"},
         ],
     },
@@ -191,7 +201,7 @@ DATA_SOURCE_CONFIG = {
     },
     "cardiovascular_age": {
         "mappings": [
-            {"sensor_key": "cardiovascular_age", "api_path": "age"},
+            {"sensor_key": "cardiovascular_age", "api_path": "vascular_age"},
         ],
     },
     "sleep_time": {
@@ -200,6 +210,20 @@ DATA_SOURCE_CONFIG = {
             {"sensor_key": "optimal_bedtime_end", "api_path": "optimal_bedtime_end"},
         ],
     },
+    "workout": {
+        "custom_processor": "workout",
+    },
+    "session": {
+        "custom_processor": "session",
+    },
+}
+
+# Custom processor registry - maps processor names to functions
+# This avoids fragile globals() lookups
+CUSTOM_PROCESSORS = {
+    "heartrate": None,  # Will be set after function definition
+    "workout": None,    # Will be set after function definition
+    "session": None,    # Will be set after function definition
 }
 
 
@@ -227,11 +251,13 @@ async def async_import_statistics(
 
         # Check if custom processor is specified
         if custom_processor := config.get("custom_processor"):
-            processor_func = globals().get(custom_processor)
+            processor_func = CUSTOM_PROCESSORS.get(custom_processor)
             if processor_func:
                 stats_count = await processor_func(hass, source_data, entry)
                 total_stats += stats_count
                 _LOGGER.debug("Imported %d %s statistics", stats_count, source_key)
+            else:
+                _LOGGER.error("Custom processor '%s' not found in registry", custom_processor)
             continue
 
         # Use generic processor
@@ -363,6 +389,184 @@ async def _process_heartrate_statistics(
             stats_count += len(data_points)
 
     return stats_count
+
+
+async def _process_workout_statistics(
+    hass: HomeAssistant,
+    workout_data: list[dict[str, Any]],
+    entry: ConfigEntry,
+) -> int:
+    """Process workout data with daily aggregation logic.
+
+    Workouts need to be aggregated by day to calculate:
+    - Number of workouts per day
+    - Total distance per day
+    - Total calories per day
+    - Total workout duration per day
+    """
+    stats_count = 0
+
+    # Group workouts by day
+    daily_workouts: dict[str, list[dict[str, Any]]] = {}
+
+    for workout in workout_data:
+        day = workout.get("day")
+        if day:
+            if day not in daily_workouts:
+                daily_workouts[day] = []
+            daily_workouts[day].append(workout)
+
+    # Calculate daily statistics
+    sensor_data = {
+        "daily_workouts": [],
+        "daily_workout_distance": [],
+        "daily_workout_calories": [],
+        "daily_workout_duration": [],
+    }
+
+    for day, workouts in daily_workouts.items():
+        timestamp = _parse_date_to_timestamp(day)
+        if not timestamp:
+            continue
+
+        # Count workouts
+        sensor_data["daily_workouts"].append({
+            "timestamp": timestamp,
+            "value": len(workouts),
+        })
+
+        # Sum distance (in meters)
+        total_distance = sum(w.get("distance", 0) for w in workouts if w.get("distance"))
+        if total_distance > 0:
+            sensor_data["daily_workout_distance"].append({
+                "timestamp": timestamp,
+                "value": total_distance,
+            })
+
+        # Sum calories
+        total_calories = sum(w.get("calories", 0) for w in workouts if w.get("calories"))
+        if total_calories > 0:
+            sensor_data["daily_workout_calories"].append({
+                "timestamp": timestamp,
+                "value": total_calories,
+            })
+
+        # Sum duration (convert to minutes)
+        total_duration = 0
+        for workout in workouts:
+            start_time = workout.get("start_datetime")
+            end_time = workout.get("end_datetime")
+            if start_time and end_time:
+                try:
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    duration_seconds = (end_dt - start_dt).total_seconds()
+                    total_duration += duration_seconds
+                except (ValueError, AttributeError):
+                    pass
+
+        if total_duration > 0:
+            sensor_data["daily_workout_duration"].append({
+                "timestamp": timestamp,
+                "value": total_duration / 60,  # Convert to minutes
+            })
+
+    # Import statistics
+    for sensor_key, data_points in sensor_data.items():
+        if data_points:
+            await _create_statistic(hass, sensor_key, data_points, entry)
+            stats_count += len(data_points)
+
+    return stats_count
+
+
+# Register workout processor
+CUSTOM_PROCESSORS["workout"] = _process_workout_statistics
+
+
+async def _process_session_statistics(
+    hass: HomeAssistant,
+    session_data: list[dict[str, Any]],
+    entry: ConfigEntry,
+) -> int:
+    """Process session data with daily aggregation logic.
+
+    Sessions (meditation, breathing, rest) need to be aggregated by day to calculate:
+    - Number of mindfulness sessions per day
+    - Total meditation duration per day
+    """
+    stats_count = 0
+
+    # Group sessions by day
+    daily_sessions: dict[str, list[dict[str, Any]]] = {}
+
+    for session in session_data:
+        day = session.get("day")
+        if day:
+            if day not in daily_sessions:
+                daily_sessions[day] = []
+            daily_sessions[day].append(session)
+
+    # Calculate daily statistics
+    sensor_data = {
+        "daily_mindfulness_sessions": [],
+        "daily_meditation_duration": [],
+    }
+
+    mindfulness_types = ["meditation", "breathing", "rest"]
+
+    for day, sessions in daily_sessions.items():
+        timestamp = _parse_date_to_timestamp(day)
+        if not timestamp:
+            continue
+
+        # Filter to mindfulness sessions
+        mindfulness_sessions = [
+            s for s in sessions
+            if s.get("type") in mindfulness_types
+        ]
+
+        # Count mindfulness sessions
+        sensor_data["daily_mindfulness_sessions"].append({
+            "timestamp": timestamp,
+            "value": len(mindfulness_sessions),
+        })
+
+        # Sum duration (convert to minutes)
+        total_duration = 0
+        for session in mindfulness_sessions:
+            start_time = session.get("start_datetime")
+            end_time = session.get("end_datetime")
+            if start_time and end_time:
+                try:
+                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                    duration_seconds = (end_dt - start_dt).total_seconds()
+                    total_duration += duration_seconds
+                except (ValueError, AttributeError):
+                    pass
+
+        if total_duration > 0:
+            sensor_data["daily_meditation_duration"].append({
+                "timestamp": timestamp,
+                "value": total_duration / 60,  # Convert to minutes
+            })
+
+    # Import statistics
+    for sensor_key, data_points in sensor_data.items():
+        if data_points:
+            await _create_statistic(hass, sensor_key, data_points, entry)
+            stats_count += len(data_points)
+
+    return stats_count
+
+
+# Register session processor
+CUSTOM_PROCESSORS["session"] = _process_session_statistics
+
+
+# Register heartrate processor
+CUSTOM_PROCESSORS["heartrate"] = _process_heartrate_statistics
 
 
 async def _create_statistic(

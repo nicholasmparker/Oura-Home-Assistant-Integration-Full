@@ -18,6 +18,10 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_HISTORICAL_MONTHS,
     CONF_HISTORICAL_DATA_IMPORTED,
+    CONF_AUTH_METHOD,
+    CONF_PERSONAL_ACCESS_TOKEN,
+    AUTH_METHOD_OAUTH2,
+    AUTH_METHOD_PAT,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_HISTORICAL_MONTHS,
     MIN_UPDATE_INTERVAL,
@@ -53,9 +57,92 @@ class OuraFlowHandler(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
         """Handle a flow initialized by the user."""
-        # Don't set unique_id here - we'll set it in async_oauth_create_entry
-        # after we get the user's Oura account ID
-        return await super().async_step_user(user_input)
+        if user_input is None:
+            # Show authentication method selection
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_AUTH_METHOD, default=AUTH_METHOD_OAUTH2): vol.In(
+                            {
+                                AUTH_METHOD_OAUTH2: "OAuth2 (Recommended)",
+                                AUTH_METHOD_PAT: "Personal Access Token",
+                            }
+                        ),
+                    }
+                ),
+            )
+
+        # Route to the appropriate authentication flow
+        if user_input[CONF_AUTH_METHOD] == AUTH_METHOD_PAT:
+            return await self.async_step_pat()
+        else:
+            # Continue with OAuth2 flow
+            return await super().async_step_user()
+
+    async def async_step_pat(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Handle PAT authentication flow."""
+        errors = {}
+
+        if user_input is not None:
+            pat_token = user_input[CONF_PERSONAL_ACCESS_TOKEN]
+
+            # Validate the PAT token by calling the API
+            try:
+                user_info = await self._async_validate_pat(pat_token)
+            except ClientError as err:
+                _LOGGER.error("Failed to validate PAT: %s", err)
+                errors["base"] = "cannot_connect"
+            except Exception as err:
+                _LOGGER.exception("Unexpected error validating PAT: %s", err)
+                errors["base"] = "unknown"
+            else:
+                # PAT is valid, create the entry
+                user_id = user_info.get("id")
+                if not user_id:
+                    _LOGGER.error("No user ID in response: %s", user_info)
+                    errors["base"] = "invalid_auth"
+                else:
+                    email = user_info.get("email")
+                    title = email if email else "Oura Ring"
+
+                    await self.async_set_unique_id(user_id)
+                    self._abort_if_unique_id_configured()
+
+                    # Store PAT auth method and token
+                    data = {
+                        CONF_AUTH_METHOD: AUTH_METHOD_PAT,
+                        CONF_PERSONAL_ACCESS_TOKEN: pat_token,
+                    }
+
+                    _LOGGER.info("Successfully authenticated with PAT: %s", title)
+                    return self.async_create_entry(title=title, data=data)
+
+        return self.async_show_form(
+            step_id="pat",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PERSONAL_ACCESS_TOKEN): str,
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "pat_url": "https://cloud.ouraring.com/personal-access-tokens"
+            },
+        )
+
+    async def _async_validate_pat(self, pat_token: str) -> dict[str, Any]:
+        """Validate PAT token by calling the personal_info endpoint."""
+        session = async_get_clientsession(self.hass)
+
+        async with session.get(
+            "https://api.ouraring.com/v2/usercollection/personal_info",
+            headers={"Authorization": f"Bearer {pat_token}"},
+        ) as response:
+            response.raise_for_status()
+            return await response.json()
 
     async def async_step_reauth(
         self, entry_data: dict[str, Any]

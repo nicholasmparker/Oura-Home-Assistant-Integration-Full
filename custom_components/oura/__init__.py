@@ -14,6 +14,9 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_HISTORICAL_MONTHS,
     CONF_HISTORICAL_DATA_IMPORTED,
+    CONF_AUTH_METHOD,
+    CONF_PERSONAL_ACCESS_TOKEN,
+    AUTH_METHOD_PAT,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_HISTORICAL_MONTHS,
 )
@@ -31,19 +34,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Oura Ring from a config entry."""
     _LOGGER.debug("Setting up Oura Ring entry. Entry data keys: %s", list(entry.data.keys()))
 
-    Implementation = (
-        await config_entry_oauth2_flow.async_get_config_entry_implementation(
-            hass, entry
+    # Check authentication method
+    auth_method = entry.data.get(CONF_AUTH_METHOD)
+
+    if auth_method == AUTH_METHOD_PAT:
+        # Use Personal Access Token authentication
+        pat_token = entry.data.get(CONF_PERSONAL_ACCESS_TOKEN)
+        _LOGGER.debug("Using PAT authentication")
+        api_client = OuraApiClient(hass, entry=entry, pat_token=pat_token)
+    else:
+        # Use OAuth2 authentication (default)
+        Implementation = (
+            await config_entry_oauth2_flow.async_get_config_entry_implementation(
+                hass, entry
+            )
         )
-    )
 
-    session = config_entry_oauth2_flow.OAuth2Session(hass, entry, Implementation)
+        session = config_entry_oauth2_flow.OAuth2Session(hass, entry, Implementation)
 
-    # Log session state for debugging
-    _LOGGER.debug("OAuth2Session created. Valid token: %s", session.valid_token)
+        # Log session state for debugging
+        _LOGGER.debug("OAuth2Session created. Valid token: %s", session.valid_token)
 
-    # Pass the entry to the API client so it can access the token directly
-    api_client = OuraApiClient(hass, session, entry)
+        # Pass the entry to the API client so it can access the token directly
+        api_client = OuraApiClient(hass, session, entry)
 
     # Get update interval from options, or use default
     update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)

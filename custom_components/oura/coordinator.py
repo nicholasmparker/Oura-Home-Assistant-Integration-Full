@@ -1,13 +1,14 @@
 """DataUpdateCoordinator for Oura Ring."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import OuraApiClient
 from .const import DOMAIN, DEFAULT_UPDATE_INTERVAL
@@ -124,6 +125,8 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._process_vo2_max(data, processed)
         self._process_cardiovascular_age(data, processed)
         self._process_sleep_time(data, processed)
+        self._process_workout(data, processed)
+        self._process_session(data, processed)
 
         return processed
 
@@ -153,20 +156,20 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 rem_sleep_seconds = latest_sleep_detail.get("rem_sleep_duration")
                 light_sleep_seconds = latest_sleep_detail.get("light_sleep_duration")
 
-                # Convert durations from seconds to hours
-                if total_sleep_seconds:
+                # Convert durations from seconds to hours (0 is valid for sleep durations)
+                if total_sleep_seconds is not None:
                     processed["total_sleep_duration"] = total_sleep_seconds / 3600
-                if deep_sleep_seconds:
+                if deep_sleep_seconds is not None:
                     processed["deep_sleep_duration"] = deep_sleep_seconds / 3600
-                if rem_sleep_seconds:
+                if rem_sleep_seconds is not None:
                     processed["rem_sleep_duration"] = rem_sleep_seconds / 3600
-                if light_sleep_seconds:
+                if light_sleep_seconds is not None:
                     processed["light_sleep_duration"] = light_sleep_seconds / 3600
-                if awake := latest_sleep_detail.get("awake_time"):
+                if (awake := latest_sleep_detail.get("awake_time")) is not None:
                     processed["awake_time"] = awake / 3600
-                if latency := latest_sleep_detail.get("latency"):
+                if (latency := latest_sleep_detail.get("latency")) is not None:
                     processed["sleep_latency"] = latency / 60  # Convert to minutes
-                if time_in_bed := latest_sleep_detail.get("time_in_bed"):
+                if (time_in_bed := latest_sleep_detail.get("time_in_bed")) is not None:
                     processed["time_in_bed"] = time_in_bed / 3600
 
                 # Calculate sleep stage percentages
@@ -218,7 +221,9 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if contributors := latest_readiness.get("contributors"):
                     processed["resting_heart_rate"] = contributors.get("resting_heart_rate")
                     processed["hrv_balance"] = contributors.get("hrv_balance")
-                    processed["sleep_regularity"] = contributors.get("sleep_regularity")
+                    # Sleep regularity is a separate contributor in the readiness data
+                    if sleep_regularity := contributors.get("sleep_regularity"):
+                        processed["sleep_regularity"] = sleep_regularity
 
     def _process_activity(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process activity data (steps, calories, MET minutes)."""
@@ -255,6 +260,7 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if stress_data := data.get("stress", {}).get("data"):
             if stress_data and len(stress_data) > 0:
                 latest_stress = stress_data[-1]
+                # Convert from seconds to minutes - 0 is valid for stress durations
                 if (stress_high := latest_stress.get("stress_high")) is not None:
                     processed["stress_high_duration"] = stress_high / 60
                 if (recovery_high := latest_stress.get("recovery_high")) is not None:
@@ -297,59 +303,28 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 processed["cardiovascular_age"] = latest_cv_age.get("vascular_age")
 
     def _process_sleep_time(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process sleep time recommendations (optimal bedtime windows)."""
+        """Process sleep time recommendations (optimal bedtime windows).
+
+        Converts seconds-from-midnight offsets to UTC datetime using the day_tz timezone offset.
+        """
         if sleep_time_data := data.get("sleep_time", {}).get("data"):
             if sleep_time_data and len(sleep_time_data) > 0:
                 latest_sleep_time = sleep_time_data[-1]
 
                 if optimal_bedtime := latest_sleep_time.get("optimal_bedtime"):
-                    # Offsets are in seconds from midnight
-                    # We need to convert them to a timestamp or time string
-                    # For now, let's store the raw offsets or convert if needed
-                    # The sensor definition expects a timestamp device class, but that requires a full datetime
-                    # Given these are offsets from midnight of the 'day', we can construct a datetime
-
                     day_str = latest_sleep_time.get("day")
                     day_tz = optimal_bedtime.get("day_tz", 0)
                     start_offset = optimal_bedtime.get("start_offset")
                     end_offset = optimal_bedtime.get("end_offset")
 
                     if day_str and start_offset is not None:
-                        # Construct approximate datetime for start
-                        # Note: This is a simplification. Ideally we'd use the timezone info.
-                        # But for Home Assistant timestamp sensor, we usually want a UTC ISO string.
-                        # Since we don't have easy timezone handling here without external libs,
-                        # and the offsets are from midnight, we might need to be careful.
-                        # However, the previous implementation expected a value.
-                        # Let's try to provide the offset in seconds if the sensor supports it,
-                        # or maybe just the raw value if that's what was intended.
-                        # Looking at const.py, device_class is "timestamp".
-
-                        # Let's try to construct a proper ISO string if possible,
-                        # or just pass the offset if we can't.
-                        # Actually, let's look at how we can make this useful.
-                        # If we just return the offset, it's not a timestamp.
-
-                        # Let's parse the day
-                        from datetime import datetime
                         try:
                             date_obj = datetime.strptime(day_str, "%Y-%m-%d")
-                            # Add offsets (which are seconds from midnight)
-                            # Note: day_tz is offset from GMT.
-                            # If we want UTC time: Local = GMT + offset => GMT = Local - offset
-                            # The offsets are from midnight local time?
-                            # "Start offset from midnight in second"
-                            # If I have 2025-11-10 00:00:00 Local
-                            # And start_offset is -3600 (23:00 previous day)
-                            # Then local start is 2025-11-09 23:00:00
-                            # To get UTC, we subtract the timezone offset.
-
+                            # Convert offsets (seconds from midnight local time) to UTC
                             start_dt = date_obj + timedelta(seconds=start_offset) - timedelta(seconds=day_tz)
                             end_dt = date_obj + timedelta(seconds=end_offset) - timedelta(seconds=day_tz)
 
-                            # Ensure we have timezone aware datetime for HA
-                            # Since we calculated UTC, set it to UTC
-                            from datetime import timezone
+                            # Make timezone-aware for Home Assistant
                             start_dt = start_dt.replace(tzinfo=timezone.utc)
                             end_dt = end_dt.replace(tzinfo=timezone.utc)
 
@@ -357,3 +332,92 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             processed["optimal_bedtime_end"] = end_dt
                         except Exception as e:
                             _LOGGER.warning("Error calculating sleep time: %s", e)
+
+    def _process_workout(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process workout data (count, type, distance, calories, intensity, duration)."""
+        if workout_data := data.get("workout", {}).get("data"):
+            if workout_data and len(workout_data) > 0:
+                # Get today's date for filtering (using HA's configured timezone)
+                today = dt_util.now().date()
+
+                # Count workouts that occurred today
+                today_workouts = [
+                    w for w in workout_data
+                    if w.get("day") and datetime.fromisoformat(w["day"]).date() == today
+                ]
+                processed["workouts_today"] = len(today_workouts)
+
+                # Get the most recent workout for "last_workout_*" sensors
+                latest_workout = workout_data[-1]
+
+                # Extract workout type (activity name)
+                if activity := latest_workout.get("activity"):
+                    processed["last_workout_type"] = activity
+
+                # Extract distance (in meters) - 0 is valid for stationary workouts
+                if (distance := latest_workout.get("distance")) is not None:
+                    processed["last_workout_distance"] = distance
+
+                # Extract calories - 0 is valid
+                if (calories := latest_workout.get("calories")) is not None:
+                    processed["last_workout_calories"] = calories
+
+                # Extract intensity (easy, moderate, hard)
+                if intensity := latest_workout.get("intensity"):
+                    processed["last_workout_intensity"] = intensity
+
+                # Calculate duration from start/end timestamps
+                start_time = latest_workout.get("start_datetime")
+                end_time = latest_workout.get("end_datetime")
+
+                if start_time and end_time:
+                    try:
+                        start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                        end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                        duration_seconds = (end_dt - start_dt).total_seconds()
+                        # Convert to minutes
+                        processed["last_workout_duration"] = duration_seconds / 60
+                    except (ValueError, AttributeError) as e:
+                        _LOGGER.debug("Error calculating workout duration: %s", e)
+
+                # Store raw workout data for sensor attributes
+                processed["_last_workout_raw"] = latest_workout
+
+    def _process_session(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process session data (mindfulness, meditation, breathing)."""
+        if session_data := data.get("session", {}).get("data"):
+            if session_data and len(session_data) > 0:
+                # Get today's date for filtering (using HA's configured timezone)
+                today = dt_util.now().date()
+
+                # Filter sessions for today
+                today_sessions = [
+                    s for s in session_data
+                    if s.get("day") and datetime.fromisoformat(s["day"]).date() == today
+                ]
+
+                # Count mindfulness sessions (meditation or breathing types)
+                mindfulness_types = ["meditation", "breathing", "rest"]
+                mindfulness_sessions = [
+                    s for s in today_sessions
+                    if s.get("type") in mindfulness_types
+                ]
+                processed["mindfulness_sessions_today"] = len(mindfulness_sessions)
+
+                # Sum duration of all mindfulness sessions (convert from seconds to minutes)
+                total_duration = 0
+                for session in mindfulness_sessions:
+                    start_time = session.get("start_datetime")
+                    end_time = session.get("end_datetime")
+
+                    if start_time and end_time:
+                        try:
+                            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                            duration_seconds = (end_dt - start_dt).total_seconds()
+                            total_duration += duration_seconds
+                        except (ValueError, AttributeError) as e:
+                            _LOGGER.debug("Error calculating session duration: %s", e)
+
+                # Convert total duration to minutes
+                processed["meditation_duration_today"] = total_duration / 60

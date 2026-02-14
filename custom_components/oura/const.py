@@ -12,6 +12,12 @@ CONF_UPDATE_INTERVAL: Final = "update_interval"
 CONF_HISTORICAL_MONTHS: Final = "historical_months"
 CONF_HISTORICAL_DATA_IMPORTED: Final = "historical_data_imported"
 
+# Authentication
+CONF_AUTH_METHOD: Final = "auth_method"
+CONF_PERSONAL_ACCESS_TOKEN: Final = "personal_access_token"
+AUTH_METHOD_OAUTH2: Final = "oauth2"
+AUTH_METHOD_PAT: Final = "pat"
+
 # OAuth2 Constants
 OAUTH2_AUTHORIZE: Final = "https://cloud.ouraring.com/oauth/authorize"
 OAUTH2_TOKEN: Final = "https://api.ouraring.com/oauth/token"
@@ -110,4 +116,16 @@ SENSOR_TYPES: Final = {
     # Sleep optimization sensors
     "optimal_bedtime_start": {"name": "Optimal Bedtime Start", "icon": "mdi:bed-clock", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "sleep_time"},
     "optimal_bedtime_end": {"name": "Optimal Bedtime End", "icon": "mdi:bed-clock", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "sleep_time"},
+
+    # Workout sensors
+    "workouts_today": {"name": "Workouts Today", "icon": "mdi:run", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "workout"},
+    "last_workout_type": {"name": "Last Workout Type", "icon": "mdi:running", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "workout"},
+    "last_workout_distance": {"name": "Last Workout Distance", "icon": "mdi:map-marker-distance", "unit": "m", "device_class": "distance", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+    "last_workout_calories": {"name": "Last Workout Calories", "icon": "mdi:fire", "unit": "kcal", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+    "last_workout_intensity": {"name": "Last Workout Intensity", "icon": "mdi:speedometer", "unit": None, "device_class": "enum", "state_class": None, "entity_category": None, "options": ["easy", "moderate", "hard"], "data_category": "workout"},
+    "last_workout_duration": {"name": "Last Workout Duration", "icon": "mdi:timer", "unit": "min", "device_class": "duration", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+
+    # Session sensors
+    "mindfulness_sessions_today": {"name": "Mindfulness Sessions Today", "icon": "mdi:meditation", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "session"},
+    "meditation_duration_today": {"name": "Meditation Duration Today", "icon": "mdi:timer-sand", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "session"},
 }

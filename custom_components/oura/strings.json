@@ -1,6 +1,20 @@
 {
   "config": {
     "step": {
+      "user": {
+        "title": "Choose Authentication Method",
+        "description": "Select how you want to authenticate with Oura Ring",
+        "data": {
+          "auth_method": "Authentication method"
+        }
+      },
+      "pat": {
+        "title": "Personal Access Token",
+        "description": "Enter your Oura Personal Access Token. You can generate one at {pat_url}",
+        "data": {
+          "personal_access_token": "Personal Access Token"
+        }
+      },
       "pick_implementation": {
         "title": "Choose Authentication Method"
       },
@@ -8,6 +22,11 @@
         "title": "Re-authenticate Oura Ring",
         "description": "Your Oura Ring authentication has expired. Please re-authenticate to continue receiving data."
       }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Oura API",
+      "invalid_auth": "Invalid Personal Access Token",
+      "unknown": "An unexpected error occurred"
     },
     "abort": {
       "already_configured": "This Oura account is already configured",
@@ -90,7 +109,15 @@
       "cardiovascular_age": {"name": "Cardiovascular age"},
       "optimal_bedtime_start": {"name": "Optimal bedtime start"},
       "optimal_bedtime_end": {"name": "Optimal bedtime end"},
-      "low_battery_alert": {"name": "Low battery alert"}
+      "low_battery_alert": {"name": "Low battery alert"},
+      "workouts_today": {"name": "Workouts today"},
+      "last_workout_type": {"name": "Last workout type"},
+      "last_workout_distance": {"name": "Last workout distance"},
+      "last_workout_calories": {"name": "Last workout calories"},
+      "last_workout_intensity": {"name": "Last workout intensity"},
+      "last_workout_duration": {"name": "Last workout duration"},
+      "mindfulness_sessions_today": {"name": "Mindfulness sessions today"},
+      "meditation_duration_today": {"name": "Meditation duration today"}
     }
   }
 }
