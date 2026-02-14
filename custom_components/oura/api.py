@@ -72,9 +72,12 @@ class OuraApiClient:
 
         Args:
             days_back: Number of days of historical data to fetch (default: 1)
+
+        Note: Oura API end_date is exclusive, so we add 1 day to include today's data.
         """
-        end_date = dt_util.now().date()
-        start_date = end_date - timedelta(days=days_back)
+        today = dt_util.now().date()
+        start_date = today - timedelta(days=days_back)
+        end_date = today + timedelta(days=1)  # Exclusive end, so +1 to include today
 
         # Fetch all endpoints concurrently using data-driven approach
         results = await asyncio.gather(
