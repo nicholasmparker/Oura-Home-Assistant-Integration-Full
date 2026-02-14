@@ -105,7 +105,7 @@ STATISTICS_METADATA = {
     "optimal_bedtime_end": {"name": "Optimal Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
     # Workout statistics (aggregated daily totals, separate from "last_workout_*" real-time sensors)
     "daily_workouts": {"name": "Daily Workouts", "unit": None, "has_mean": False, "has_sum": True},
-    "daily_workout_distance": {"name": "Daily Workout Distance", "unit": "m", "has_mean": False, "has_sum": True},
+    "daily_workout_distance": {"name": "Daily Workout Distance", "unit": "mi", "has_mean": False, "has_sum": True},
     "daily_workout_calories": {"name": "Daily Workout Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "daily_workout_duration": {"name": "Daily Workout Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
     # Session statistics (aggregated daily totals)
@@ -452,12 +452,12 @@ async def _process_workout_statistics(
             "value": len(workouts),
         })
 
-        # Sum distance (in meters)
-        total_distance = sum(w.get("distance", 0) for w in workouts if w.get("distance"))
-        if total_distance > 0:
+        # Sum distance (convert from meters to miles)
+        total_distance_meters = sum(w.get("distance", 0) for w in workouts if w.get("distance"))
+        if total_distance_meters > 0:
             sensor_data["daily_workout_distance"].append({
                 "timestamp": timestamp,
-                "value": total_distance,
+                "value": total_distance_meters / 1609.34,  # Convert meters to miles
             })
 
         # Sum calories

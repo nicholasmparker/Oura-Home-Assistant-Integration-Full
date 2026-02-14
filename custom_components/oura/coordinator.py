@@ -366,9 +366,9 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if activity := latest_workout.get("activity"):
                     processed["last_workout_type"] = activity
 
-                # Extract distance (in meters) - 0 is valid for stationary workouts
+                # Extract distance (convert from meters to miles) - 0 is valid for stationary workouts
                 if (distance := latest_workout.get("distance")) is not None:
-                    processed["last_workout_distance"] = distance
+                    processed["last_workout_distance"] = distance / 1609.34  # Convert meters to miles
 
                 # Extract calories - 0 is valid
                 if (calories := latest_workout.get("calories")) is not None:
