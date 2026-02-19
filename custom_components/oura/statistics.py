@@ -126,13 +126,14 @@ DATA_SOURCE_CONFIG = {
     "sleep": {
         "mappings": [
             {"sensor_key": "sleep_score", "api_path": "score"},
-            {"sensor_key": "sleep_efficiency", "api_path": "contributors.efficiency"},
+            # Note: sleep_efficiency moved to sleep_detail (actual %, not contributor score)
             {"sensor_key": "restfulness", "api_path": "contributors.restfulness"},
             {"sensor_key": "sleep_timing", "api_path": "contributors.timing"},
         ],
     },
     "sleep_detail": {
         "mappings": [
+            {"sensor_key": "sleep_efficiency", "api_path": "efficiency"},  # Actual sleep efficiency %
             {"sensor_key": "total_sleep_duration", "api_path": "total_sleep_duration", "transform": "seconds_to_hours"},
             {"sensor_key": "deep_sleep_duration", "api_path": "deep_sleep_duration", "transform": "seconds_to_hours"},
             {"sensor_key": "rem_sleep_duration", "api_path": "rem_sleep_duration", "transform": "seconds_to_hours"},
