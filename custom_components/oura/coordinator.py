@@ -143,7 +143,9 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if day := latest_sleep.get("day"):
                     processed["_data_date"] = day
                 if contributors := latest_sleep.get("contributors"):
-                    processed["sleep_efficiency"] = contributors.get("efficiency")
+                    efficiency_value = contributors.get("efficiency")
+                    _LOGGER.debug("Sleep efficiency from daily_sleep contributors: %s", efficiency_value)
+                    processed["sleep_efficiency"] = efficiency_value
                     processed["restfulness"] = contributors.get("restfulness")
                     processed["sleep_timing"] = contributors.get("timing")
 
@@ -152,6 +154,10 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if sleep_detail_data := data.get("sleep_detail", {}).get("data"):
             if sleep_detail_data and len(sleep_detail_data) > 0:
                 latest_sleep_detail = sleep_detail_data[-1]
+
+                # Check if sleep_detail has an efficiency field
+                if "efficiency" in latest_sleep_detail:
+                    _LOGGER.debug("Sleep efficiency found in sleep_detail endpoint: %s", latest_sleep_detail.get("efficiency"))
 
                 # Extract duration values
                 total_sleep_seconds = latest_sleep_detail.get("total_sleep_duration")
