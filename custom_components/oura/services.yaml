@@ -1,0 +1,11 @@
+set_debug_logging:
+  name: Set debug logging
+  description: Enable or disable debug logging for the Oura integration.
+  fields:
+    enabled:
+      name: Enabled
+      description: Enable (true) or disable (false) debug logging.
+      required: true
+      example: true
+      selector:
+        boolean:

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import logging
+from typing import Final
+
+import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_entry_oauth2_flow, config_validation as cv
 
 from .api import OuraApiClient
@@ -28,6 +31,16 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 # Config entry only (no YAML configuration)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+# Service names
+SERVICE_SET_DEBUG_LOGGING: Final = "set_debug_logging"
+
+# Service schemas
+SERVICE_SET_DEBUG_LOGGING_SCHEMA = vol.Schema(
+    {
+        vol.Required("enabled"): cv.boolean,
+    }
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -96,6 +109,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Register services (only once, not per entry)
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_DEBUG_LOGGING):
+        async def set_debug_logging(call: ServiceCall) -> None:
+            """Service to enable/disable debug logging."""
+            enabled = call.data["enabled"]
+            logger_name = f"custom_components.{DOMAIN}"
+            logger = logging.getLogger(logger_name)
+
+            if enabled:
+                logger.setLevel(logging.DEBUG)
+                _LOGGER.info("Debug logging enabled for %s", logger_name)
+            else:
+                logger.setLevel(logging.INFO)
+                _LOGGER.info("Debug logging disabled for %s", logger_name)
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_DEBUG_LOGGING,
+            set_debug_logging,
+            schema=SERVICE_SET_DEBUG_LOGGING_SCHEMA,
+        )
 
     # Register update listener for options changes
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
