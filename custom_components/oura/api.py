@@ -5,13 +5,16 @@ import asyncio
 from datetime import datetime, timedelta
 import logging
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientSession, ClientResponseError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.config_entry_oauth2_flow import OAuth2Session
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    OAuth2Session,
+    OAuth2TokenRequestReauthError,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.util import dt as dt_util
 
 from .const import API_BASE_URL
 
@@ -19,7 +22,9 @@ _LOGGER = logging.getLogger(__name__)
 
 # API endpoint configuration - maps data key to method name
 # This enables data-driven endpoint management and eliminates duplication
-API_ENDPOINTS = {
+_HEARTRATE_FAILED_MARKER = "_heartrate_fetch_failed"
+
+API_ENDPOINTS: dict[str, str] = {
     "sleep": "_async_get_sleep",
     "readiness": "_async_get_readiness",
     "activity": "_async_get_activity",
@@ -36,6 +41,8 @@ API_ENDPOINTS = {
     "tag": "_async_get_tag",
     "enhanced_tag": "_async_get_enhanced_tag",
     "rest_mode": "_async_get_rest_mode",
+    "ring_battery_level": "_async_get_ring_battery_level",
+    "ring_configuration": "_async_get_ring_configuration",
 }
 
 
@@ -75,21 +82,26 @@ class OuraApiClient:
 
         Args:
             days_back: Number of days of historical data to fetch (default: 1)
-
-        Note: Oura API end_date is exclusive, so we add 1 day to include today's data.
         """
-        today = dt_util.now().date()
+        local_tz = ZoneInfo(self.hass.config.time_zone)
+        today = datetime.now(tz=local_tz).date()
+        end_date = today + timedelta(days=1)  # Oura API end_date is exclusive
         start_date = today - timedelta(days=days_back)
-        end_date = today + timedelta(days=1)  # Exclusive end, so +1 to include today
 
-        # Fetch all endpoints concurrently using data-driven approach
         results = await asyncio.gather(
-            *(getattr(self, method)(start_date, end_date) for method in API_ENDPOINTS.values()),
+            *(getattr(self, method_name)(start_date, end_date) for method_name in API_ENDPOINTS.values()),
             return_exceptions=True,
         )
 
-        # Process results and count failures
-        data = {}
+        # A rejected refresh_token fails every endpoint identically, and each one
+        # would otherwise be swallowed below as an ordinary per-endpoint outage
+        # (data[key] = {}), which hides the fact that reauthentication is needed.
+        # Propagate it so the coordinator can convert it into ConfigEntryAuthFailed.
+        for result in results:
+            if isinstance(result, OAuth2TokenRequestReauthError):
+                raise result
+
+        data: dict[str, Any] = {}
         failed_endpoints = 0
         total_endpoints = len(API_ENDPOINTS)
 
@@ -99,9 +111,14 @@ class OuraApiClient:
                 _LOGGER.debug("Error fetching %s data: %s", key, result)
                 data[key] = {}
             else:
+                # Heart-rate fetches intentionally absorb non-auth errors to
+                # preserve shape for downstream consumers. Count those absorbed
+                # failures here for connectivity diagnostics.
+                if isinstance(result, dict) and result.pop(_HEARTRATE_FAILED_MARKER, False):
+                    failed_endpoints += 1
+                    _LOGGER.debug("Error fetching %s data: one or more requests failed", key)
                 data[key] = result
 
-        # Log network connectivity issues if >= 50% of endpoints failed
         if failed_endpoints >= total_endpoints * 0.5:
             _LOGGER.warning(
                 "Network connectivity issue: %d/%d API endpoints failed. "
@@ -139,54 +156,51 @@ class OuraApiClient:
         return await self._async_get(url, params)
 
     async def _async_get_heartrate(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
-        """Get heart rate data.
-        
-        Note: The heartrate endpoint has a maximum range of 30 days.
-        For historical data requests, we'll batch the requests.
-        """
+        """Get heart rate data, following pagination and batching >30-day ranges."""
         url = f"{API_BASE_URL}/heartrate"
-        
-        # Calculate the number of days in the range
         days_range = (end_date - start_date).days
-        
-        # If range is > 30 days, batch the requests
+
         if days_range > 30:
-            all_data = []
+            all_data: list[Any] = []
+            had_outage = False
             current_start = start_date
-            
             while current_start < end_date:
                 current_end = min(current_start + timedelta(days=30), end_date)
                 params = {
                     "start_datetime": f"{current_start.isoformat()}T00:00:00",
                     "end_datetime": f"{current_end.isoformat()}T23:59:59",
                 }
-                
                 try:
-                    batch_data = await self._async_get(url, params)
-                    if batch_data and "data" in batch_data:
-                        all_data.extend(batch_data["data"])
+                    batch = await self._async_get_all_pages(url, params)
+                    all_data.extend(batch)
+                except OAuth2TokenRequestReauthError:
+                    # A rejected refresh token is not a per-batch outage: it
+                    # must reach async_get_data so the coordinator can raise
+                    # ConfigEntryAuthFailed, as the comment there states.
+                    raise
                 except Exception as err:
+                    had_outage = True
                     _LOGGER.warning(
                         "Failed to fetch heart rate data for %s to %s: %s",
-                        current_start, current_end, err
+                        current_start, current_end, err,
                     )
-                
                 current_start = current_end + timedelta(days=1)
-            
-            return {"data": all_data}
-        else:
-            # Range is 30 days or less, single request
-            params = {
-                "start_datetime": f"{start_date.isoformat()}T00:00:00",
-                "end_datetime": f"{end_date.isoformat()}T23:59:59",
-            }
-            
-            try:
-                return await self._async_get(url, params)
-            except Exception as err:
-                _LOGGER.debug("Heart rate endpoint failed: %s", err)
-                # Return empty data instead of failing completely
-                return {"data": []}
+            result: dict[str, Any] = {"data": all_data}
+            if had_outage:
+                result[_HEARTRATE_FAILED_MARKER] = True
+            return result
+
+        params = {
+            "start_datetime": f"{start_date.isoformat()}T00:00:00",
+            "end_datetime": f"{end_date.isoformat()}T23:59:59",
+        }
+        try:
+            return {"data": await self._async_get_all_pages(url, params)}
+        except OAuth2TokenRequestReauthError:
+            raise
+        except Exception as err:
+            _LOGGER.debug("Heart rate endpoint failed: %s", err)
+            return {"data": [], _HEARTRATE_FAILED_MARKER: True}
 
     async def _async_get_sleep_detail(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
         """Get detailed sleep data including HRV."""
@@ -225,10 +239,10 @@ class OuraApiClient:
             raise
 
     async def _async_get_spo2(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
-        """Get daily SpO2 (blood oxygen) data. Available for Gen3 and Oura Ring 4.
-        
+        """Get daily SpO2 (blood oxygen) data. Available for Gen3, Oura Ring 4, and Ring 5.
+
         Note: This endpoint may return 401 if the user hasn't authorized the spo2Daily scope
-        or if their ring doesn't support SpO2 (only Gen3 and Ring 4).
+        or if their ring doesn't support SpO2.
         """
         url = f"{API_BASE_URL}/daily_spo2"
         params = {
@@ -373,6 +387,39 @@ class OuraApiClient:
             if err.status == 401:  # Feature not available
                 return {"data": []}
             raise
+
+    async def _async_get_ring_battery_level(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
+        """Get the latest ring battery level reading."""
+        url = f"{API_BASE_URL}/ring_battery_level"
+        try:
+            return await self._async_get(url, {"latest": "true"})
+        except ClientResponseError as err:
+            if err.status in (401, 404):
+                return {"data": []}
+            raise
+
+    async def _async_get_ring_configuration(self, start_date: datetime.date, end_date: datetime.date) -> dict[str, Any]:
+        """Get ring configuration (hardware type, firmware version, color, design, size)."""
+        url = f"{API_BASE_URL}/ring_configuration"
+        try:
+            return await self._async_get(url)
+        except ClientResponseError as err:
+            if err.status == 401:
+                return {"data": []}
+            raise
+
+    async def _async_get_all_pages(self, url: str, params: dict[str, Any]) -> list[Any]:
+        """Fetch all pages for a paginated endpoint, following next_token links."""
+        all_data: list[Any] = []
+        current_params: dict[str, Any] = dict(params)
+        while True:
+            page = await self._async_get(url, current_params)
+            all_data.extend(page.get("data", []))
+            next_token = page.get("next_token")
+            if not next_token:
+                break
+            current_params = {"next_token": next_token}
+        return all_data
 
     async def _async_get(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make GET request to Oura API."""

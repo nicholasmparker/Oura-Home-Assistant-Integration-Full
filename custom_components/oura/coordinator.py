@@ -1,12 +1,14 @@
 """DataUpdateCoordinator for Oura Ring."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.config_entry_oauth2_flow import OAuth2TokenRequestReauthError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -61,11 +63,25 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             return processed_data
 
+        except OAuth2TokenRequestReauthError as err:
+            # Oura's token endpoint rejected our refresh_token (HTTP 4xx from
+            # /oauth/token). The credentials are no longer valid — falling through to
+            # the generic handler below would silently keep serving stale data forever,
+            # since HA never gets the chance to raise the "Reauthenticate" UI prompt.
+            _LOGGER.warning(
+                "Oura token refresh rejected by the API (reauthentication required): %s",
+                err,
+            )
+            raise ConfigEntryAuthFailed(
+                f"Oura token refresh was rejected, reauthentication required: {err}"
+            ) from err
+
         except Exception as err:
             # Log the error but keep existing data to maintain sensor states
             # This handles transient network issues gracefully
             _LOGGER.warning(
-                "Error communicating with API (will retry in %s minutes): %s",
+                "Error communicating with API (%s) (will retry in %s minutes): %s",
+                type(err).__name__,
                 self.update_interval.total_seconds() / 60,
                 err
             )
@@ -130,8 +146,38 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._process_tag(data, processed)
         self._process_enhanced_tag(data, processed)
         self._process_rest_mode(data, processed)
+        self._process_ring_battery_level(data, processed)
+        self._process_ring_configuration(data, processed)
 
         return processed
+
+    @staticmethod
+    def _parse_api_day(day_value: str | None) -> date | None:
+        """Parse an API day value to a date."""
+        if not day_value:
+            return None
+
+        try:
+            return datetime.fromisoformat(day_value.split("T")[0]).date()
+        except ValueError:
+            try:
+                return datetime.strptime(day_value.split("T")[0], "%Y-%m-%d").date()
+            except ValueError:
+                return None
+
+    @staticmethod
+    def _parse_iso_datetime(value: str | None) -> datetime | None:
+        """Parse an ISO 8601 datetime string."""
+        if not value:
+            return None
+
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        except (ValueError, AttributeError):
+            return None
 
     def _process_sleep_scores(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process sleep scores (contribution scores, not durations)."""
@@ -151,73 +197,108 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _process_sleep_details(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process detailed sleep data (actual durations and HRV)."""
-        if sleep_detail_data := data.get("sleep_detail", {}).get("data"):
-            if sleep_detail_data and len(sleep_detail_data) > 0:
-                latest_sleep_detail = sleep_detail_data[-1]
+        sleep_detail_data = data.get("sleep_detail", {}).get("data") or []
 
-                # Sleep efficiency (actual percentage, not contributor score)
-                if efficiency := latest_sleep_detail.get("efficiency"):
-                    processed["sleep_efficiency"] = efficiency
+        # Only use completed records (both timestamps present). Oura returns in-progress
+        # records during active sleep with bedtime_end=null, which causes bedtime sensors
+        # to go Unknown or show the current night's start time rather than the last
+        # completed sleep.
+        completed = [
+            r for r in sleep_detail_data
+            if r.get("bedtime_start") and r.get("bedtime_end")
+        ]
 
-                # Extract duration values
-                total_sleep_seconds = latest_sleep_detail.get("total_sleep_duration")
-                deep_sleep_seconds = latest_sleep_detail.get("deep_sleep_duration")
-                rem_sleep_seconds = latest_sleep_detail.get("rem_sleep_duration")
-                light_sleep_seconds = latest_sleep_detail.get("light_sleep_duration")
+        # Discard records older than 2 days and sort ascending by day so [-1] always
+        # picks the most recent calendar date, regardless of API response ordering.
+        today = dt_util.now().date()
+        max_age = today - timedelta(days=2)
+        completed = [
+            r for r in completed
+            if (self._parse_api_day(r.get("day")) or date.min) >= max_age
+        ]
+        completed.sort(key=lambda r: (
+            self._parse_api_day(r.get("day")) or date.min,
+            r.get("total_sleep_duration") or 0,
+        ))
 
-                # Convert durations from seconds to hours (0 is valid for sleep durations)
-                if total_sleep_seconds is not None:
-                    processed["total_sleep_duration"] = total_sleep_seconds / 3600
-                if deep_sleep_seconds is not None:
-                    processed["deep_sleep_duration"] = deep_sleep_seconds / 3600
-                if rem_sleep_seconds is not None:
-                    processed["rem_sleep_duration"] = rem_sleep_seconds / 3600
-                if light_sleep_seconds is not None:
-                    processed["light_sleep_duration"] = light_sleep_seconds / 3600
-                if (awake := latest_sleep_detail.get("awake_time")) is not None:
-                    processed["awake_time"] = awake / 3600
-                if (latency := latest_sleep_detail.get("latency")) is not None:
-                    processed["sleep_latency"] = latency / 60  # Convert to minutes
-                if (time_in_bed := latest_sleep_detail.get("time_in_bed")) is not None:
-                    processed["time_in_bed"] = time_in_bed / 3600
+        if completed:
+            # Prefer long_sleep (main overnight sleep >3h) over naps when multiple
+            # completed records exist for the same day.
+            main_sleep = [r for r in completed if r.get("type") == "long_sleep"]
+            latest_sleep_detail = (main_sleep or completed)[-1]
+        else:
+            # No completed record yet (e.g. ring not synced after midnight).
+            # Preserve last known bedtime values so sensors don't flip to Unknown.
+            if self.data:
+                for key in ("bedtime_start", "bedtime_end"):
+                    if (existing := self.data.get(key)) is not None:
+                        processed[key] = existing
+            return
 
-                # Calculate sleep stage percentages
-                if total_sleep_seconds and total_sleep_seconds > 0:
-                    if deep_sleep_seconds is not None:
-                        processed["deep_sleep_percentage"] = round(
-                            (deep_sleep_seconds / total_sleep_seconds) * 100, 1
-                        )
-                    if rem_sleep_seconds is not None:
-                        processed["rem_sleep_percentage"] = round(
-                            (rem_sleep_seconds / total_sleep_seconds) * 100, 1
-                        )
+        if (efficiency := latest_sleep_detail.get("efficiency")) is not None:
+            processed["sleep_efficiency"] = efficiency
 
-                # HRV during sleep
-                if average_hrv := latest_sleep_detail.get("average_hrv"):
-                    processed["average_sleep_hrv"] = average_hrv
+        # Extract duration values
+        total_sleep_seconds = latest_sleep_detail.get("total_sleep_duration")
+        deep_sleep_seconds = latest_sleep_detail.get("deep_sleep_duration")
+        rem_sleep_seconds = latest_sleep_detail.get("rem_sleep_duration")
+        light_sleep_seconds = latest_sleep_detail.get("light_sleep_duration")
 
-                # Bedtime timestamps (when you went to sleep and woke up)
-                # Parse ISO 8601 datetime strings (e.g., "2024-01-15T23:30:00+00:00") to datetime objects
-                if bedtime_start := latest_sleep_detail.get("bedtime_start"):
-                    try:
-                        processed["bedtime_start"] = datetime.fromisoformat(bedtime_start.replace('Z', '+00:00'))
-                    except (ValueError, AttributeError) as e:
-                        _LOGGER.debug("Error parsing bedtime_start '%s': %s", bedtime_start, e)
+        # Convert durations from seconds to hours
+        if total_sleep_seconds:
+            processed["total_sleep_duration"] = total_sleep_seconds / 3600
+        if deep_sleep_seconds:
+            processed["deep_sleep_duration"] = deep_sleep_seconds / 3600
+        if rem_sleep_seconds:
+            processed["rem_sleep_duration"] = rem_sleep_seconds / 3600
+        if light_sleep_seconds:
+            processed["light_sleep_duration"] = light_sleep_seconds / 3600
+        if (awake := latest_sleep_detail.get("awake_time")) is not None:
+            processed["awake_time"] = awake / 3600
+        if (latency := latest_sleep_detail.get("latency")) is not None:
+            processed["sleep_latency"] = latency / 60  # Convert to minutes
+        if (time_in_bed := latest_sleep_detail.get("time_in_bed")) is not None:
+            processed["time_in_bed"] = time_in_bed / 3600
 
-                if bedtime_end := latest_sleep_detail.get("bedtime_end"):
-                    try:
-                        processed["bedtime_end"] = datetime.fromisoformat(bedtime_end.replace('Z', '+00:00'))
-                    except (ValueError, AttributeError) as e:
-                        _LOGGER.debug("Error parsing bedtime_end '%s': %s", bedtime_end, e)
+        # Calculate sleep stage percentages
+        if total_sleep_seconds and total_sleep_seconds > 0:
+            if deep_sleep_seconds is not None:
+                processed["deep_sleep_percentage"] = round(
+                    (deep_sleep_seconds / total_sleep_seconds) * 100, 1
+                )
+            if rem_sleep_seconds is not None:
+                processed["rem_sleep_percentage"] = round(
+                    (rem_sleep_seconds / total_sleep_seconds) * 100, 1
+                )
 
+        # HRV during sleep
+        if average_hrv := latest_sleep_detail.get("average_hrv"):
+            processed["average_sleep_hrv"] = average_hrv
 
-                if lowest_heart_rate := latest_sleep_detail.get("lowest_heart_rate"):
-                    processed["lowest_sleep_heart_rate"] = lowest_heart_rate
-                if average_heart_rate := latest_sleep_detail.get("average_heart_rate"):
-                    processed["average_sleep_heart_rate"] = average_heart_rate
+        # Bedtime timestamps (when you went to sleep and woke up)
+        if bedtime_start := latest_sleep_detail.get("bedtime_start"):
+            try:
+                processed["bedtime_start"] = datetime.fromisoformat(bedtime_start.replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                _LOGGER.debug("Error parsing bedtime_start '%s': %s", bedtime_start, e)
 
-                # Low battery alert flag (always set, defaults to False)
-                processed["low_battery_alert"] = latest_sleep_detail.get("low_battery_alert", False)
+        if bedtime_end := latest_sleep_detail.get("bedtime_end"):
+            try:
+                processed["bedtime_end"] = datetime.fromisoformat(bedtime_end.replace('Z', '+00:00'))
+            except (ValueError, AttributeError) as e:
+                _LOGGER.debug("Error parsing bedtime_end '%s': %s", bedtime_end, e)
+
+        if lowest_heart_rate := latest_sleep_detail.get("lowest_heart_rate"):
+            processed["lowest_sleep_heart_rate"] = lowest_heart_rate
+        if average_heart_rate := latest_sleep_detail.get("average_heart_rate"):
+            processed["average_sleep_heart_rate"] = average_heart_rate
+
+        # Low battery alert flag (always set, defaults to False)
+        processed["low_battery_alert"] = latest_sleep_detail.get("low_battery_alert", False)
+
+        # Sleep analysis reason (how sleep was detected: foreground/background)
+        if reason := latest_sleep_detail.get("sleep_analysis_reason"):
+            processed["sleep_analysis_reason"] = reason
 
     def _process_readiness(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process readiness data (contributors are scores 1-100)."""
@@ -247,22 +328,46 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 processed["met_min_high"] = latest_activity.get("high_activity_met_minutes")
                 processed["met_min_medium"] = latest_activity.get("medium_activity_met_minutes")
                 processed["met_min_low"] = latest_activity.get("low_activity_met_minutes")
+                if (t := latest_activity.get("high_activity_time")) is not None:
+                    processed["high_activity_time"] = t / 60
+                if (t := latest_activity.get("medium_activity_time")) is not None:
+                    processed["medium_activity_time"] = t / 60
+                if (t := latest_activity.get("low_activity_time")) is not None:
+                    processed["low_activity_time"] = t / 60
 
     def _process_heart_rate(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process heart rate data with aggregation from recent readings."""
         if heartrate_data := data.get("heartrate", {}).get("data"):
-            if heartrate_data and len(heartrate_data) > 0:
-                # Latest reading
-                latest_hr = heartrate_data[-1]
-                processed["current_heart_rate"] = latest_hr.get("bpm")
-                processed["heart_rate_timestamp"] = latest_hr.get("timestamp")
+            if not heartrate_data:
+                return
 
-                # Aggregate recent readings
-                recent_readings = [hr.get("bpm") for hr in heartrate_data[-10:] if hr.get("bpm")]
-                if recent_readings:
-                    processed["average_heart_rate"] = sum(recent_readings) / len(recent_readings)
-                    processed["min_heart_rate"] = min(recent_readings)
-                    processed["max_heart_rate"] = max(recent_readings)
+            # Sort by timestamp to guarantee recency regardless of API return order
+            sorted_hr = sorted(heartrate_data, key=lambda x: x.get("timestamp", ""))
+
+            latest_hr = sorted_hr[-1]
+            processed["current_heart_rate"] = latest_hr.get("bpm")
+            if ts := latest_hr.get("timestamp"):
+                try:
+                    processed["heart_rate_timestamp"] = datetime.fromisoformat(
+                        ts.replace("Z", "+00:00")
+                    )
+                except (ValueError, AttributeError):
+                    pass
+
+            # Aggregate readings from the last 24 hours; fall back to last 10 by position
+            from datetime import timezone
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            recent_readings = [
+                hr.get("bpm") for hr in sorted_hr
+                if hr.get("bpm") and hr.get("timestamp") and
+                (parsed := self._parse_iso_datetime(hr["timestamp"])) and parsed > cutoff
+            ]
+            if not recent_readings:
+                recent_readings = [hr.get("bpm") for hr in sorted_hr[-10:] if hr.get("bpm")]
+            if recent_readings:
+                processed["average_heart_rate"] = sum(recent_readings) / len(recent_readings)
+                processed["min_heart_rate"] = min(recent_readings)
+                processed["max_heart_rate"] = max(recent_readings)
 
     def _process_stress(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process stress data (durations and day summary)."""
@@ -310,6 +415,8 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if cardiovascular_age_data and len(cardiovascular_age_data) > 0:
                 latest_cv_age = cardiovascular_age_data[-1]
                 processed["cardiovascular_age"] = latest_cv_age.get("vascular_age")
+                if (pwv := latest_cv_age.get("pulse_wave_velocity")) is not None:
+                    processed["pulse_wave_velocity"] = pwv
 
     def _process_sleep_time(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
         """Process sleep time recommendations (optimal bedtime windows).
@@ -342,199 +449,163 @@ class OuraDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         except Exception as e:
                             _LOGGER.warning("Error calculating sleep time: %s", e)
 
+    _LAST_WORKOUT_KEYS = (
+        "last_workout_type",
+        "last_workout_distance",
+        "last_workout_calories",
+        "last_workout_intensity",
+        "last_workout_duration",
+        "_last_workout_raw",
+    )
+
     def _process_workout(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process workout data (count, type, distance, calories, intensity, duration)."""
+        """Process workout summaries for current-day entities."""
         if workout_data := data.get("workout", {}).get("data"):
             if workout_data and len(workout_data) > 0:
-                # Get today's date for filtering (using HA's configured timezone)
                 today = dt_util.now().date()
-                _LOGGER.debug("Processing %d workouts. Today's date: %s", len(workout_data), today)
-
-                # Count workouts that occurred today
-                today_workouts = []
-                for w in workout_data:
-                    if day_str := w.get("day"):
-                        try:
-                            workout_date = datetime.strptime(day_str, "%Y-%m-%d").date()
-                            if workout_date == today:
-                                today_workouts.append(w)
-                        except ValueError:
-                            _LOGGER.debug("Error parsing workout day: %s", day_str)
-
+                today_workouts = [
+                    workout
+                    for workout in workout_data
+                    if self._parse_api_day(workout.get("day")) == today
+                ]
                 processed["workouts_today"] = len(today_workouts)
-                _LOGGER.debug("Found %d workouts for today. Workout days: %s",
-                             len(today_workouts), [w.get("day") for w in workout_data])
+                processed["_workouts_today_list"] = today_workouts
 
-                # Get the most recent workout for "last_workout_*" sensors
                 latest_workout = workout_data[-1]
-
-                # Extract workout type (activity name)
-                if activity := latest_workout.get("activity"):
-                    processed["last_workout_type"] = activity
-
-                # Extract distance (convert from meters to miles) - 0 is valid for stationary workouts
+                processed["last_workout_type"] = latest_workout.get("activity")
                 if (distance := latest_workout.get("distance")) is not None:
+                    # Convert meters -> miles; 0 is valid for stationary workouts
                     processed["last_workout_distance"] = round(distance / METERS_PER_MILE, 2)
-
-                # Extract calories - 0 is valid
                 if (calories := latest_workout.get("calories")) is not None:
                     processed["last_workout_calories"] = calories
+                processed["last_workout_intensity"] = latest_workout.get("intensity")
 
-                # Extract intensity (easy, moderate, hard)
-                if intensity := latest_workout.get("intensity"):
-                    processed["last_workout_intensity"] = intensity
+                start_dt = self._parse_iso_datetime(latest_workout.get("start_datetime"))
+                end_dt = self._parse_iso_datetime(latest_workout.get("end_datetime"))
+                if start_dt and end_dt:
+                    processed["last_workout_duration"] = (end_dt - start_dt).total_seconds() / 60
 
-                # Calculate duration from start/end timestamps
-                start_time = latest_workout.get("start_datetime")
-                end_time = latest_workout.get("end_datetime")
-
-                if start_time and end_time:
-                    try:
-                        start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                        end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-                        duration_seconds = (end_dt - start_dt).total_seconds()
-                        # Convert to minutes
-                        processed["last_workout_duration"] = duration_seconds / 60
-                    except (ValueError, AttributeError) as e:
-                        _LOGGER.debug("Error calculating workout duration: %s", e)
-
-                # Store raw workout data for sensor attributes
                 processed["_last_workout_raw"] = latest_workout
+                return
+
+        # No workout data in current API window — carry forward previous values
+        processed["workouts_today"] = 0
+        processed["_workouts_today_list"] = []
+        if self.data:
+            for key in self._LAST_WORKOUT_KEYS:
+                if key in self.data:
+                    processed[key] = self.data[key]
 
     def _process_session(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process session data (mindfulness, meditation, breathing)."""
+        """Process current-day mindfulness session summaries."""
         if session_data := data.get("session", {}).get("data"):
             if session_data and len(session_data) > 0:
-                # Get today's date for filtering (using HA's configured timezone)
                 today = dt_util.now().date()
-
-                # Filter sessions for today
+                mindfulness_types = {"meditation", "breathing", "rest"}
                 today_sessions = [
-                    s for s in session_data
-                    if s.get("day") and datetime.fromisoformat(s["day"]).date() == today
+                    session
+                    for session in session_data
+                    if self._parse_api_day(session.get("day")) == today
+                    and session.get("type") in mindfulness_types
                 ]
 
-                # Count mindfulness sessions (meditation or breathing types)
-                mindfulness_types = ["meditation", "breathing", "rest"]
-                mindfulness_sessions = [
-                    s for s in today_sessions
-                    if s.get("type") in mindfulness_types
-                ]
-                processed["mindfulness_sessions_today"] = len(mindfulness_sessions)
+                processed["mindfulness_sessions_today"] = len(today_sessions)
 
-                # Sum duration of all mindfulness sessions (convert from seconds to minutes)
-                total_duration = 0
-                for session in mindfulness_sessions:
-                    start_time = session.get("start_datetime")
-                    end_time = session.get("end_datetime")
+                total_duration_seconds = 0.0
+                for session in today_sessions:
+                    start_dt = self._parse_iso_datetime(session.get("start_datetime"))
+                    end_dt = self._parse_iso_datetime(session.get("end_datetime"))
+                    if start_dt and end_dt:
+                        total_duration_seconds += (end_dt - start_dt).total_seconds()
 
-                    if start_time and end_time:
-                        try:
-                            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-                            duration_seconds = (end_dt - start_dt).total_seconds()
-                            total_duration += duration_seconds
-                        except (ValueError, AttributeError) as e:
-                            _LOGGER.debug("Error calculating session duration: %s", e)
-
-                # Convert total duration to minutes
-                processed["meditation_duration_today"] = total_duration / 60
+                processed["meditation_duration_today"] = total_duration_seconds / 60
 
     def _process_tag(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process tag data (user-created tags for tracking events)."""
+        """Process current-day tags."""
         if tag_data := data.get("tag", {}).get("data"):
             if tag_data and len(tag_data) > 0:
-                # Get today's date for filtering (using HA's configured timezone)
                 today = dt_util.now().date()
+                today_tags: list[str] = []
 
-                # Filter tags for today
-                today_tags = []
                 for tag_entry in tag_data:
-                    if day_str := tag_entry.get("day"):
-                        try:
-                            tag_date = datetime.strptime(day_str, "%Y-%m-%d").date()
-                            if tag_date == today:
-                                # Extract the tags list from this entry
-                                if tags := tag_entry.get("tags"):
-                                    today_tags.extend(tags)
-                        except ValueError:
-                            _LOGGER.debug("Error parsing tag day: %s", day_str)
+                    if self._parse_api_day(tag_entry.get("day")) != today:
+                        continue
+                    tags = tag_entry.get("tags")
+                    if isinstance(tags, list):
+                        today_tags.extend(str(tag) for tag in tags if tag)
 
-                # Remove duplicates while preserving order
                 unique_tags = list(dict.fromkeys(today_tags))
-
-                # Store as comma-separated string (HA sensor states must be string/number/date/datetime/None)
-                # The list is also stored in attributes for programmatic access
                 processed["tags_today"] = ", ".join(unique_tags) if unique_tags else ""
-                processed["_tags_today_list"] = unique_tags  # Store list for attributes
                 processed["tag_count_today"] = len(unique_tags)
-
-                # Store latest tag entry for attributes
-                if tag_data:
-                    processed["_latest_tag_entry"] = tag_data[-1]
+                processed["_tags_today_list"] = unique_tags
+                processed["_latest_tag_entry"] = tag_data[-1]
 
     def _process_enhanced_tag(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process enhanced tag data (provides tag_type_code, start_time, end_time, comment)."""
+        """Process enhanced tag metadata for current-day attributes."""
         if enhanced_tag_data := data.get("enhanced_tag", {}).get("data"):
             if enhanced_tag_data and len(enhanced_tag_data) > 0:
-                # Get today's date for filtering (using HA's configured timezone)
                 today = dt_util.now().date()
+                today_enhanced_tags: list[dict[str, Any]] = []
 
-                # Filter enhanced tags for today
-                today_enhanced_tags = []
-                for enhanced_tag_entry in enhanced_tag_data:
-                    if day_str := enhanced_tag_entry.get("day"):
-                        try:
-                            tag_date = datetime.strptime(day_str, "%Y-%m-%d").date()
-                            if tag_date == today:
-                                today_enhanced_tags.append(enhanced_tag_entry)
-                        except ValueError:
-                            _LOGGER.debug("Error parsing enhanced tag day: %s", day_str)
+                for tag_entry in enhanced_tag_data:
+                    if self._parse_api_day(tag_entry.get("day")) != today:
+                        continue
 
-                # Store enhanced tag data for sensor attributes
-                # This provides rich metadata: tag_type_code, start_time, end_time, comment
-                processed["_enhanced_tags_today"] = today_enhanced_tags
+                    today_enhanced_tags.append(
+                        {
+                            "tag_type_code": tag_entry.get("tag_type_code"),
+                            "start_time": tag_entry.get("start_time"),
+                            "end_time": tag_entry.get("end_time"),
+                            "comment": tag_entry.get("comment"),
+                        }
+                    )
+
+                if today_enhanced_tags:
+                    processed["_enhanced_tags_today"] = today_enhanced_tags
 
     def _process_rest_mode(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
-        """Process rest mode period data."""
-        # Set default to prevent stale states when API data stops arriving
+        """Process current rest mode state."""
         processed["rest_mode_active"] = False
 
         if rest_mode_data := data.get("rest_mode", {}).get("data"):
             if rest_mode_data and len(rest_mode_data) > 0:
-                # Get current time
                 now = dt_util.now()
 
-                # Check if any rest mode period is currently active
-                is_active = False
-                active_period = None
-                active_start_time = None
-                active_end_time = None
-
                 for period in rest_mode_data:
-                    start_time_str = period.get("start_time")
-                    end_time_str = period.get("end_time")
+                    start_dt = self._parse_iso_datetime(period.get("start_time"))
+                    end_dt = self._parse_iso_datetime(period.get("end_time"))
+                    if not start_dt or not end_dt:
+                        continue
 
-                    if start_time_str and end_time_str:
-                        try:
-                            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-                            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                    if start_dt <= now <= end_dt:
+                        processed["rest_mode_active"] = True
+                        processed["rest_mode_start"] = start_dt
+                        processed["rest_mode_end"] = end_dt
+                        processed["_active_rest_mode_raw"] = period
+                        break
 
-                            # Check if current time is within this period
-                            if start_time <= now <= end_time:
-                                is_active = True
-                                active_period = period
-                                active_start_time = start_time
-                                active_end_time = end_time
-                                break
-                        except (ValueError, AttributeError) as e:
-                            _LOGGER.debug("Error parsing rest mode times: %s", e)
+    def _process_ring_battery_level(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process ring battery level and charging state."""
+        if battery_data := data.get("ring_battery_level", {}).get("data"):
+            if battery_data and len(battery_data) > 0:
+                latest = battery_data[-1]
+                processed["ring_battery_level"] = latest.get("level")
+                charging = latest.get("charging")
+                processed["ring_battery_charging"] = bool(charging) if charging is not None else None
 
-                # Store rest mode status
-                processed["rest_mode_active"] = is_active
-
-                # Store timestamps if rest mode is active (reuse already-parsed datetimes)
-                if is_active and active_period:
-                    processed["rest_mode_start"] = active_start_time
-                    processed["rest_mode_end"] = active_end_time
-                    processed["_active_rest_mode_raw"] = active_period
+    def _process_ring_configuration(self, data: dict[str, Any], processed: dict[str, Any]) -> None:
+        """Process ring configuration for device info enrichment."""
+        if ring_config_data := data.get("ring_configuration", {}).get("data"):
+            if ring_config_data and len(ring_config_data) > 0:
+                # Oura retains configurations for previously set up rings, so choose
+                # the newest setup instead of relying on response order.
+                config = max(
+                    ring_config_data,
+                    key=lambda item: self._parse_iso_datetime(item.get("set_up_at"))
+                    or datetime.min.replace(tzinfo=UTC),
+                )
+                processed["ring_hardware_type"] = config.get("hardware_type")
+                processed["ring_firmware_version"] = config.get("firmware_version")
+                processed["ring_color"] = config.get("color")
+                processed["ring_design"] = config.get("design")
+                processed["ring_size"] = config.get("size")

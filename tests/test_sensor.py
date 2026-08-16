@@ -7,6 +7,7 @@ from homeassistant.const import CONF_ID
 from homeassistant.helpers.device_registry import DeviceEntryType
 
 from custom_components.oura.const import DOMAIN, SENSOR_TYPES
+from custom_components.oura.binary_sensor import OuraRestModeBinarySensor
 from custom_components.oura.coordinator import OuraDataUpdateCoordinator
 from custom_components.oura.sensor import OuraSensor
 
@@ -138,4 +139,116 @@ def test_boolean_sensor_false_value(mock_coordinator):
     
     assert sensor.native_value is False
     assert sensor.available is True
+
+
+def test_tags_sensor_exposes_tag_attributes(mock_coordinator):
+    """Test tags sensor exposes structured tag attributes."""
+    mock_coordinator.data = {
+        "tags_today": "coffee, travel",
+        "_tags_today_list": ["coffee", "travel"],
+        "_enhanced_tags_today": [{"tag_type_code": "coffee", "comment": "Morning coffee"}],
+    }
+
+    sensor = OuraSensor(
+        coordinator=mock_coordinator,
+        sensor_type="tags_today",
+        sensor_info=SENSOR_TYPES["tags_today"],
+    )
+
+    assert sensor.native_value == "coffee, travel"
+    assert sensor.extra_state_attributes == {
+        "tags": ["coffee", "travel"],
+        "enhanced_tags": [{"tag_type_code": "coffee", "comment": "Morning coffee"}],
+    }
+
+
+def test_workout_sensor_exposes_raw_workout_attribute(mock_coordinator):
+    """Test workout summary sensors expose the last workout payload."""
+    mock_coordinator.data = {
+        "last_workout_type": "running",
+        "_last_workout_raw": {"activity": "running", "distance": 5000},
+    }
+
+    sensor = OuraSensor(
+        coordinator=mock_coordinator,
+        sensor_type="last_workout_type",
+        sensor_info=SENSOR_TYPES["last_workout_type"],
+    )
+
+    assert sensor.extra_state_attributes == {"workout": {"activity": "running", "distance": 5000}}
+
+
+def test_workouts_today_sensor_exposes_workout_list(mock_coordinator):
+    """Test workouts_today sensor exposes the full list of today's workouts."""
+    workouts = [
+        {"activity": "strength_training", "start_datetime": "2026-03-24T06:00:00+00:00"},
+        {"activity": "cycling", "start_datetime": "2026-03-24T07:00:00+00:00"},
+    ]
+    mock_coordinator.data = {
+        "workouts_today": 2,
+        "_workouts_today_list": workouts,
+    }
+
+    sensor = OuraSensor(
+        coordinator=mock_coordinator,
+        sensor_type="workouts_today",
+        sensor_info=SENSOR_TYPES["workouts_today"],
+    )
+
+    assert sensor.native_value == 2
+    assert sensor.extra_state_attributes == {"workouts": workouts}
+
+
+def test_workouts_attribute_not_on_other_sensors(mock_coordinator):
+    """Test that other sensors don't pick up the workouts attribute."""
+    mock_coordinator.data = {
+        "sleep_score": 82,
+        "workouts_today": 1,
+        "_workouts_today_list": [{"activity": "running"}],
+    }
+
+    sensor = OuraSensor(
+        coordinator=mock_coordinator,
+        sensor_type="sleep_score",
+        sensor_info=SENSOR_TYPES["sleep_score"],
+    )
+
+    assert sensor.native_value == 82
+    assert sensor.extra_state_attributes is None
+
+
+def test_workouts_today_sensor_without_list(mock_coordinator):
+    """Test workouts_today attributes when no list has been published."""
+    mock_coordinator.data = {"workouts_today": 0}
+
+    sensor = OuraSensor(
+        coordinator=mock_coordinator,
+        sensor_type="workouts_today",
+        sensor_info=SENSOR_TYPES["workouts_today"],
+    )
+
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes is None
+
+
+def test_rest_mode_binary_sensor(mock_coordinator):
+    """Test rest mode binary sensor state and attributes."""
+    mock_coordinator.data = {
+        "rest_mode_active": True,
+        "_active_rest_mode_raw": {
+            "id": "rest-mode-1",
+            "start_day": "2026-03-24",
+            "end_day": "2026-03-25",
+        },
+    }
+
+    sensor = OuraRestModeBinarySensor(mock_coordinator)
+
+    assert sensor.is_on is True
+    assert sensor.available is True
+    assert sensor.extra_state_attributes == {
+        "id": "rest-mode-1",
+        "start_day": "2026-03-24",
+        "end_day": "2026-03-25",
+    }
 

@@ -2,10 +2,20 @@
 from datetime import timedelta
 from typing import Final
 
-from homeassistant.const import UnitOfLength
+from homeassistant.const import UnitOfEnergy, UnitOfLength, UnitOfTime
 from homeassistant.helpers.entity import EntityCategory
 
 DOMAIN: Final = "oura"
+
+# Ring hardware type → model display name
+RING_MODEL_NAMES: Final = {
+    "gen1": "Gen 1",
+    "gen2": "Gen 2",
+    "gen2m": "Gen 2M",
+    "gen3": "Gen 3",
+    "gen4": "4",
+    "or5": "5",
+}
 ATTRIBUTION: Final = "Data provided by Oura Ring"
 
 # Unit conversions
@@ -24,7 +34,9 @@ AUTH_METHOD_PAT: Final = "pat"
 
 # OAuth2 Constants
 OAUTH2_AUTHORIZE: Final = "https://cloud.ouraring.com/oauth/authorize"
+# Legacy endpoint (cloud.ouraring.com apps); new-portal apps use the fallback below.
 OAUTH2_TOKEN: Final = "https://api.ouraring.com/oauth/token"
+OAUTH2_TOKEN_FALLBACK: Final = "https://moi.ouraring.com/oauth/v2/ext/oauth-token"
 OAUTH2_SCOPES: Final = [
     "email",
     "personal",
@@ -85,18 +97,23 @@ SENSOR_TYPES: Final = {
     "active_calories": {"name": "Active Calories", "icon": "mdi:fire", "unit": "kcal", "device_class": None, "state_class": "total", "entity_category": None, "data_category": "activity"},
     "total_calories": {"name": "Total Calories", "icon": "mdi:fire", "unit": "kcal", "device_class": None, "state_class": "total", "entity_category": None, "data_category": "activity"},
     "target_calories": {"name": "Target Calories", "icon": "mdi:bullseye", "unit": "kcal", "device_class": None, "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "activity"},
-    "met_min_high": {"name": "High Activity Time", "icon": "mdi:run-fast", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
-    "met_min_medium": {"name": "Medium Activity Time", "icon": "mdi:run", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
-    "met_min_low": {"name": "Low Activity Time", "icon": "mdi:walk", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "met_min_high": {"name": "High Activity MET Minutes", "icon": "mdi:run-fast", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "met_min_medium": {"name": "Medium Activity MET Minutes", "icon": "mdi:run", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "met_min_low": {"name": "Low Activity MET Minutes", "icon": "mdi:walk", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "high_activity_time": {"name": "High Activity Time", "icon": "mdi:run-fast", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "medium_activity_time": {"name": "Medium Activity Time", "icon": "mdi:run", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
+    "low_activity_time": {"name": "Low Activity Time", "icon": "mdi:walk", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "activity"},
 
     # Heart Rate sensors (from heartrate endpoint - more granular data)
     "current_heart_rate": {"name": "Current Heart Rate", "icon": "mdi:heart-pulse", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "heartrate"},
     "average_heart_rate": {"name": "Average Heart Rate", "icon": "mdi:heart", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "heartrate"},
     "min_heart_rate": {"name": "Minimum Heart Rate", "icon": "mdi:heart-minus", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "heartrate"},
     "max_heart_rate": {"name": "Maximum Heart Rate", "icon": "mdi:heart-plus", "unit": "bpm", "device_class": None, "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "heartrate"},
+    "heart_rate_timestamp": {"name": "Last Heart Rate Reading", "icon": "mdi:clock-outline", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "heartrate"},
 
     # HRV sensors (from detailed sleep endpoint)
     "average_sleep_hrv": {"name": "Average Sleep HRV", "icon": "mdi:heart-pulse", "unit": "ms", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "sleep_detail"},
+    "sleep_analysis_reason": {"name": "Sleep Analysis Reason", "icon": "mdi:sleep", "unit": None, "device_class": "enum", "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC, "options": ["foreground_sleep_analysis", "bedtime_edit", "background_sleep_analysis", "background_created_foreground_updated"], "data_category": "sleep_detail"},
 
     # Stress sensors
     "stress_high_duration": {"name": "Stress High Duration", "icon": "mdi:account-question", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "stress"},
@@ -116,6 +133,7 @@ SENSOR_TYPES: Final = {
     # Fitness sensors
     "vo2_max": {"name": "VO2 Max", "icon": "mdi:heart-pulse", "unit": "ml/kg/min", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "vo2_max"},
     "cardiovascular_age": {"name": "Cardiovascular Age", "icon": "mdi:heart-pulse", "unit": "years", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "cardiovascular_age"},
+    "pulse_wave_velocity": {"name": "Pulse Wave Velocity", "icon": "mdi:sine-wave", "unit": "m/s", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "cardiovascular_age"},
 
     # Sleep optimization sensors
     "optimal_bedtime_start": {"name": "Optimal Bedtime Start", "icon": "mdi:bed-clock", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "sleep_time"},
@@ -123,21 +141,24 @@ SENSOR_TYPES: Final = {
 
     # Workout sensors
     "workouts_today": {"name": "Workouts Today", "icon": "mdi:run", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "workout"},
-    "last_workout_type": {"name": "Last Workout Type", "icon": "mdi:running", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "workout"},
+    "last_workout_type": {"name": "Last Workout Type", "icon": "mdi:run", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "workout"},
     "last_workout_distance": {"name": "Last Workout Distance", "icon": "mdi:map-marker-distance", "unit": UnitOfLength.MILES, "device_class": "distance", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
-    "last_workout_calories": {"name": "Last Workout Calories", "icon": "mdi:fire", "unit": "kcal", "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+    "last_workout_calories": {"name": "Last Workout Calories", "icon": "mdi:fire", "unit": UnitOfEnergy.KILO_CALORIE, "device_class": None, "state_class": "measurement", "entity_category": None, "data_category": "workout"},
     "last_workout_intensity": {"name": "Last Workout Intensity", "icon": "mdi:speedometer", "unit": None, "device_class": "enum", "state_class": None, "entity_category": None, "options": ["easy", "moderate", "hard"], "data_category": "workout"},
-    "last_workout_duration": {"name": "Last Workout Duration", "icon": "mdi:timer", "unit": "min", "device_class": "duration", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
+    "last_workout_duration": {"name": "Last Workout Duration", "icon": "mdi:timer", "unit": UnitOfTime.MINUTES, "device_class": "duration", "state_class": "measurement", "entity_category": None, "data_category": "workout"},
 
     # Session sensors
     "mindfulness_sessions_today": {"name": "Mindfulness Sessions Today", "icon": "mdi:meditation", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "session"},
-    "meditation_duration_today": {"name": "Meditation Duration Today", "icon": "mdi:timer-sand", "unit": "min", "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "session"},
+    "meditation_duration_today": {"name": "Meditation Duration Today", "icon": "mdi:timer-sand", "unit": UnitOfTime.MINUTES, "device_class": "duration", "state_class": "total", "entity_category": None, "data_category": "session"},
 
     # Tag sensors
     "tags_today": {"name": "Tags Today", "icon": "mdi:tag-multiple", "unit": None, "device_class": None, "state_class": None, "entity_category": None, "data_category": "tag"},
     "tag_count_today": {"name": "Tag Count Today", "icon": "mdi:counter", "unit": None, "device_class": None, "state_class": "total", "entity_category": None, "data_category": "tag"},
 
-    # Rest Mode timestamp sensors
+    # Rest mode sensors
     "rest_mode_start": {"name": "Rest Mode Start", "icon": "mdi:bed-clock", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None, "data_category": "rest_mode"},
     "rest_mode_end": {"name": "Rest Mode End", "icon": "mdi:bed-clock-outline", "unit": None, "device_class": "timestamp", "state_class": None, "entity_category": None, "data_category": "rest_mode"},
+
+    # Ring battery sensor
+    "ring_battery_level": {"name": "Ring Battery Level", "icon": "mdi:battery", "unit": "%", "device_class": "battery", "state_class": "measurement", "entity_category": EntityCategory.DIAGNOSTIC, "data_category": "ring_battery_level"},
 }

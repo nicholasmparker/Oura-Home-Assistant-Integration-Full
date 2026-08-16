@@ -49,7 +49,7 @@ def _get_unit_class(unit: str | None) -> str | None:
         return SensorDeviceClass.TEMPERATURE
     if unit in (UnitOfEnergy.KILO_CALORIE, UnitOfEnergy.KILO_WATT_HOUR):
         return SensorDeviceClass.ENERGY
-    if unit in (UnitOfLength.MILES, UnitOfLength.KILOMETERS, UnitOfLength.METERS):
+    if unit in (UnitOfLength.METERS, UnitOfLength.KILOMETERS, UnitOfLength.MILES):
         return SensorDeviceClass.DISTANCE
 
     # Custom units without standard device classes
@@ -63,13 +63,13 @@ STATISTICS_METADATA = {
     "sleep_efficiency": {"name": "Sleep Efficiency", "unit": "%", "has_mean": True, "has_sum": False},
     "restfulness": {"name": "Restfulness", "unit": "%", "has_mean": True, "has_sum": False},
     "sleep_timing": {"name": "Sleep Timing", "unit": None, "has_mean": True, "has_sum": False},
-    "total_sleep_duration": {"name": "Total Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
-    "deep_sleep_duration": {"name": "Deep Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
-    "rem_sleep_duration": {"name": "REM Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
-    "light_sleep_duration": {"name": "Light Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
-    "awake_time": {"name": "Awake Time", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
+    "total_sleep_duration": {"name": "Total Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
+    "deep_sleep_duration": {"name": "Deep Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
+    "rem_sleep_duration": {"name": "REM Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
+    "light_sleep_duration": {"name": "Light Sleep Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
+    "awake_time": {"name": "Awake Time", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
     "sleep_latency": {"name": "Sleep Latency", "unit": UnitOfTime.MINUTES, "has_mean": True, "has_sum": False},
-    "time_in_bed": {"name": "Time in Bed", "unit": UnitOfTime.HOURS, "has_mean": True, "has_sum": False},
+    "time_in_bed": {"name": "Time in Bed", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
     "bedtime_start": {"name": "Bedtime Start", "unit": None, "has_mean": False, "has_sum": False},
     "bedtime_end": {"name": "Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
     "deep_sleep_percentage": {"name": "Deep Sleep Percentage", "unit": "%", "has_mean": True, "has_sum": False},
@@ -87,14 +87,14 @@ STATISTICS_METADATA = {
     "active_calories": {"name": "Active Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "total_calories": {"name": "Total Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "target_calories": {"name": "Target Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": True, "has_sum": False},
-    "met_min_high": {"name": "High Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
-    "met_min_medium": {"name": "Medium Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
-    "met_min_low": {"name": "Low Activity MET Minutes", "unit": "min", "has_mean": False, "has_sum": True},
+    "met_min_high": {"name": "High Activity MET Minutes", "unit": None, "has_mean": False, "has_sum": True},
+    "met_min_medium": {"name": "Medium Activity MET Minutes", "unit": None, "has_mean": False, "has_sum": True},
+    "met_min_low": {"name": "Low Activity MET Minutes", "unit": None, "has_mean": False, "has_sum": True},
     "average_heart_rate": {"name": "Average Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "min_heart_rate": {"name": "Minimum Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
     "max_heart_rate": {"name": "Maximum Heart Rate", "unit": "bpm", "has_mean": True, "has_sum": False},
-    "stress_high_duration": {"name": "Stress High Duration", "unit": UnitOfTime.MINUTES, "has_mean": True, "has_sum": False},
-    "recovery_high_duration": {"name": "Recovery High Duration", "unit": UnitOfTime.MINUTES, "has_mean": True, "has_sum": False},
+    "stress_high_duration": {"name": "Stress High Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
+    "recovery_high_duration": {"name": "Recovery High Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
     "stress_day_summary": {"name": "Stress Day Summary", "unit": None, "has_mean": False, "has_sum": False},
     "resilience_level": {"name": "Resilience Level", "unit": None, "has_mean": False, "has_sum": False},
     "sleep_recovery_score": {"name": "Sleep Recovery Score", "unit": None, "has_mean": True, "has_sum": False},
@@ -106,19 +106,15 @@ STATISTICS_METADATA = {
     "cardiovascular_age": {"name": "Cardiovascular Age", "unit": "years", "has_mean": True, "has_sum": False},
     "optimal_bedtime_start": {"name": "Optimal Bedtime Start", "unit": None, "has_mean": False, "has_sum": False},
     "optimal_bedtime_end": {"name": "Optimal Bedtime End", "unit": None, "has_mean": False, "has_sum": False},
-    # Workout statistics (aggregated daily totals, separate from "last_workout_*" real-time sensors)
     "daily_workouts": {"name": "Daily Workouts", "unit": None, "has_mean": False, "has_sum": True},
     "daily_workout_distance": {"name": "Daily Workout Distance", "unit": UnitOfLength.MILES, "has_mean": False, "has_sum": True},
     "daily_workout_calories": {"name": "Daily Workout Calories", "unit": UnitOfEnergy.KILO_CALORIE, "has_mean": False, "has_sum": True},
     "daily_workout_duration": {"name": "Daily Workout Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
-    # Session statistics (aggregated daily totals)
     "daily_mindfulness_sessions": {"name": "Daily Mindfulness Sessions", "unit": None, "has_mean": False, "has_sum": True},
     "daily_meditation_duration": {"name": "Daily Meditation Duration", "unit": UnitOfTime.MINUTES, "has_mean": False, "has_sum": True},
-    # Tag statistics
     "daily_tag_count": {"name": "Daily Tag Count", "unit": None, "has_mean": False, "has_sum": True},
-    # Rest Mode statistics
-    "daily_rest_mode_duration": {"name": "Daily Rest Mode Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
     "daily_rest_mode_count": {"name": "Daily Rest Mode Periods", "unit": None, "has_mean": False, "has_sum": True},
+    "daily_rest_mode_duration": {"name": "Daily Rest Mode Duration", "unit": UnitOfTime.HOURS, "has_mean": False, "has_sum": True},
 }
 
 # Configuration mapping API data sources to sensor mappings
@@ -126,14 +122,13 @@ DATA_SOURCE_CONFIG = {
     "sleep": {
         "mappings": [
             {"sensor_key": "sleep_score", "api_path": "score"},
-            # Note: sleep_efficiency moved to sleep_detail (actual %, not contributor score)
             {"sensor_key": "restfulness", "api_path": "contributors.restfulness"},
             {"sensor_key": "sleep_timing", "api_path": "contributors.timing"},
         ],
     },
     "sleep_detail": {
         "mappings": [
-            {"sensor_key": "sleep_efficiency", "api_path": "efficiency"},  # Actual sleep efficiency %
+            {"sensor_key": "sleep_efficiency", "api_path": "efficiency"},
             {"sensor_key": "total_sleep_duration", "api_path": "total_sleep_duration", "transform": "seconds_to_hours"},
             {"sensor_key": "deep_sleep_duration", "api_path": "deep_sleep_duration", "transform": "seconds_to_hours"},
             {"sensor_key": "rem_sleep_duration", "api_path": "rem_sleep_duration", "transform": "seconds_to_hours"},
@@ -180,7 +175,7 @@ DATA_SOURCE_CONFIG = {
         ],
     },
     "heartrate": {
-        "custom_processor": "heartrate",
+        "custom_processor": "_process_heartrate_statistics",
     },
     "stress": {
         "mappings": [
@@ -213,38 +208,24 @@ DATA_SOURCE_CONFIG = {
             {"sensor_key": "cardiovascular_age", "api_path": "vascular_age"},
         ],
     },
-    "sleep_time": {
-        "mappings": [
-            {"sensor_key": "optimal_bedtime_start", "api_path": "optimal_bedtime_start"},
-            {"sensor_key": "optimal_bedtime_end", "api_path": "optimal_bedtime_end"},
-        ],
-    },
     "workout": {
-        "custom_processor": "workout",
+        "custom_processor": "_process_workout_statistics",
     },
     "session": {
-        "custom_processor": "session",
+        "custom_processor": "_process_session_statistics",
     },
     "tag": {
-        "custom_processor": "tag",
+        "custom_processor": "_process_tag_statistics",
     },
     "enhanced_tag": {
-        "custom_processor": "enhanced_tag",
+        "custom_processor": "_process_enhanced_tag_statistics",
     },
     "rest_mode": {
-        "custom_processor": "rest_mode",
+        "custom_processor": "_process_rest_mode_statistics",
     },
-}
-
-# Custom processor registry - maps processor names to functions
-# This avoids fragile globals() lookups
-CUSTOM_PROCESSORS = {
-    "heartrate": None,  # Will be set after function definition
-    "workout": None,    # Will be set after function definition
-    "session": None,    # Will be set after function definition
-    "tag": None,        # Will be set after function definition
-    "enhanced_tag": None,  # Will be set after function definition
-    "rest_mode": None,  # Will be set after function definition
+    # sleep_time (optimal_bedtime_start/end) intentionally excluded from backfill:
+    # API returns second-offsets-from-midnight + timezone, requiring complex transform
+    # that the generic processor can't handle. Live data handled by coordinator.
 }
 
 
@@ -272,13 +253,11 @@ async def async_import_statistics(
 
         # Check if custom processor is specified
         if custom_processor := config.get("custom_processor"):
-            processor_func = CUSTOM_PROCESSORS.get(custom_processor)
+            processor_func = globals().get(custom_processor)
             if processor_func:
                 stats_count = await processor_func(hass, source_data, entry)
                 total_stats += stats_count
                 _LOGGER.debug("Imported %d %s statistics", stats_count, source_key)
-            else:
-                _LOGGER.error("Custom processor '%s' not found in registry", custom_processor)
             continue
 
         # Use generic processor
@@ -417,27 +396,14 @@ async def _process_workout_statistics(
     workout_data: list[dict[str, Any]],
     entry: ConfigEntry,
 ) -> int:
-    """Process workout data with daily aggregation logic.
-
-    Workouts need to be aggregated by day to calculate:
-    - Number of workouts per day
-    - Total distance per day
-    - Total calories per day
-    - Total workout duration per day
-    """
+    """Process workout data into daily aggregate statistics."""
     stats_count = 0
-
-    # Group workouts by day
     daily_workouts: dict[str, list[dict[str, Any]]] = {}
 
     for workout in workout_data:
-        day = workout.get("day")
-        if day:
-            if day not in daily_workouts:
-                daily_workouts[day] = []
-            daily_workouts[day].append(workout)
+        if day := workout.get("day"):
+            daily_workouts.setdefault(day, []).append(workout)
 
-    # Calculate daily statistics
     sensor_data = {
         "daily_workouts": [],
         "daily_workout_distance": [],
@@ -450,59 +416,41 @@ async def _process_workout_statistics(
         if not timestamp:
             continue
 
-        # Count workouts
-        sensor_data["daily_workouts"].append({
-            "timestamp": timestamp,
-            "value": len(workouts),
-        })
+        sensor_data["daily_workouts"].append({"timestamp": timestamp, "value": len(workouts)})
 
-        # Sum distance (convert from meters to miles)
-        total_distance_meters = sum(w.get("distance", 0) for w in workouts if w.get("distance"))
+        total_distance_meters = sum(workout.get("distance", 0) for workout in workouts if workout.get("distance") is not None)
         if total_distance_meters > 0:
-            sensor_data["daily_workout_distance"].append({
-                "timestamp": timestamp,
-                "value": round(total_distance_meters / METERS_PER_MILE, 2),
-            })
+            # Fork reports workout distance in miles (see const.py / coordinator)
+            sensor_data["daily_workout_distance"].append(
+                {"timestamp": timestamp, "value": round(total_distance_meters / METERS_PER_MILE, 2)}
+            )
 
-        # Sum calories
-        total_calories = sum(w.get("calories", 0) for w in workouts if w.get("calories"))
+        total_calories = sum(workout.get("calories", 0) for workout in workouts if workout.get("calories") is not None)
         if total_calories > 0:
-            sensor_data["daily_workout_calories"].append({
-                "timestamp": timestamp,
-                "value": total_calories,
-            })
+            sensor_data["daily_workout_calories"].append({"timestamp": timestamp, "value": total_calories})
 
-        # Sum duration (convert to minutes)
-        total_duration = 0
+        total_duration_seconds = 0.0
         for workout in workouts:
             start_time = workout.get("start_datetime")
             end_time = workout.get("end_datetime")
-            if start_time and end_time:
-                try:
-                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-                    duration_seconds = (end_dt - start_dt).total_seconds()
-                    total_duration += duration_seconds
-                except (ValueError, AttributeError):
-                    pass
+            if not start_time or not end_time:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                total_duration_seconds += (end_dt - start_dt).total_seconds()
+            except (ValueError, AttributeError):
+                continue
 
-        if total_duration > 0:
-            sensor_data["daily_workout_duration"].append({
-                "timestamp": timestamp,
-                "value": total_duration / 60,  # Convert to minutes
-            })
+        if total_duration_seconds > 0:
+            sensor_data["daily_workout_duration"].append({"timestamp": timestamp, "value": total_duration_seconds / 60})
 
-    # Import statistics
     for sensor_key, data_points in sensor_data.items():
         if data_points:
             await _create_statistic(hass, sensor_key, data_points, entry)
             stats_count += len(data_points)
 
     return stats_count
-
-
-# Register workout processor
-CUSTOM_PROCESSORS["workout"] = _process_workout_statistics
 
 
 async def _process_session_statistics(
@@ -510,70 +458,44 @@ async def _process_session_statistics(
     session_data: list[dict[str, Any]],
     entry: ConfigEntry,
 ) -> int:
-    """Process session data with daily aggregation logic.
-
-    Sessions (meditation, breathing, rest) need to be aggregated by day to calculate:
-    - Number of mindfulness sessions per day
-    - Total meditation duration per day
-    """
+    """Process session data into daily aggregate statistics."""
     stats_count = 0
-
-    # Group sessions by day
+    mindfulness_types = {"meditation", "breathing", "rest"}
     daily_sessions: dict[str, list[dict[str, Any]]] = {}
 
     for session in session_data:
-        day = session.get("day")
-        if day:
-            if day not in daily_sessions:
-                daily_sessions[day] = []
-            daily_sessions[day].append(session)
+        if day := session.get("day"):
+            daily_sessions.setdefault(day, []).append(session)
 
-    # Calculate daily statistics
     sensor_data = {
         "daily_mindfulness_sessions": [],
         "daily_meditation_duration": [],
     }
-
-    mindfulness_types = ["meditation", "breathing", "rest"]
 
     for day, sessions in daily_sessions.items():
         timestamp = _parse_date_to_timestamp(day)
         if not timestamp:
             continue
 
-        # Filter to mindfulness sessions
-        mindfulness_sessions = [
-            s for s in sessions
-            if s.get("type") in mindfulness_types
-        ]
+        mindfulness_sessions = [session for session in sessions if session.get("type") in mindfulness_types]
+        sensor_data["daily_mindfulness_sessions"].append({"timestamp": timestamp, "value": len(mindfulness_sessions)})
 
-        # Count mindfulness sessions
-        sensor_data["daily_mindfulness_sessions"].append({
-            "timestamp": timestamp,
-            "value": len(mindfulness_sessions),
-        })
-
-        # Sum duration (convert to minutes)
-        total_duration = 0
+        total_duration_seconds = 0.0
         for session in mindfulness_sessions:
             start_time = session.get("start_datetime")
             end_time = session.get("end_datetime")
-            if start_time and end_time:
-                try:
-                    start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-                    end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-                    duration_seconds = (end_dt - start_dt).total_seconds()
-                    total_duration += duration_seconds
-                except (ValueError, AttributeError):
-                    pass
+            if not start_time or not end_time:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+                total_duration_seconds += (end_dt - start_dt).total_seconds()
+            except (ValueError, AttributeError):
+                continue
 
-        if total_duration > 0:
-            sensor_data["daily_meditation_duration"].append({
-                "timestamp": timestamp,
-                "value": total_duration / 60,  # Convert to minutes
-            })
+        if total_duration_seconds > 0:
+            sensor_data["daily_meditation_duration"].append({"timestamp": timestamp, "value": total_duration_seconds / 60})
 
-    # Import statistics
     for sensor_key, data_points in sensor_data.items():
         if data_points:
             await _create_statistic(hass, sensor_key, data_points, entry)
@@ -582,20 +504,12 @@ async def _process_session_statistics(
     return stats_count
 
 
-# Register session processor
-CUSTOM_PROCESSORS["session"] = _process_session_statistics
-
-
 async def _process_tag_statistics(
     hass: HomeAssistant,
     tag_data: list[dict[str, Any]],
     entry: ConfigEntry,
 ) -> int:
-    """Process tag data for statistics import.
-
-    Note: Basic tag endpoint doesn't provide rich enough data for meaningful statistics.
-    Use enhanced_tag processor instead.
-    """
+    """Basic tag endpoint does not produce historical statistics."""
     return 0
 
 
@@ -604,43 +518,23 @@ async def _process_enhanced_tag_statistics(
     enhanced_tag_data: list[dict[str, Any]],
     entry: ConfigEntry,
 ) -> int:
-    """Process enhanced tag data with daily aggregation logic.
-
-    Enhanced tags provide rich metadata (tag_type_code, start_time, end_time, comment)
-    and are aggregated by day to calculate daily tag counts.
-    """
+    """Process enhanced tag data into daily tag counts."""
     stats_count = 0
-
-    # Group enhanced tags by day
-    daily_tags: dict[str, int] = {}
+    daily_counts: dict[str, int] = {}
 
     for tag_entry in enhanced_tag_data:
-        day = tag_entry.get("day")
-        if day:
-            if day not in daily_tags:
-                daily_tags[day] = 0
-            daily_tags[day] += 1
+        if day := tag_entry.get("day"):
+            daily_counts[day] = daily_counts.get(day, 0) + 1
 
-    # Create daily statistics
-    sensor_data = {
-        "daily_tag_count": [],
-    }
-
-    for day, count in daily_tags.items():
+    data_points = []
+    for day, count in daily_counts.items():
         timestamp = _parse_date_to_timestamp(day)
-        if not timestamp:
-            continue
+        if timestamp:
+            data_points.append({"timestamp": timestamp, "value": count})
 
-        sensor_data["daily_tag_count"].append({
-            "timestamp": timestamp,
-            "value": count,
-        })
-
-    # Import statistics
-    for sensor_key, data_points in sensor_data.items():
-        if data_points:
-            await _create_statistic(hass, sensor_key, data_points, entry)
-            stats_count += len(data_points)
+    if data_points:
+        await _create_statistic(hass, "daily_tag_count", data_points, entry)
+        stats_count += len(data_points)
 
     return stats_count
 
@@ -650,88 +544,45 @@ async def _process_rest_mode_statistics(
     rest_mode_data: list[dict[str, Any]],
     entry: ConfigEntry,
 ) -> int:
-    """Process rest mode data with daily aggregation logic.
-
-    Rest mode periods are aggregated by day to calculate:
-    - Number of rest mode periods per day
-    - Total rest mode duration per day (in hours)
-    """
+    """Process rest mode data into daily aggregate statistics."""
     stats_count = 0
-
-    # Track rest mode periods that overlap with each day
-    daily_rest_mode: dict[str, dict[str, Any]] = {}
+    daily_stats: dict[str, dict[str, float]] = {}
 
     for period in rest_mode_data:
         start_day = period.get("start_day")
-        end_day = period.get("end_day")
         start_time = period.get("start_time")
         end_time = period.get("end_time")
-
-        if not all([start_day, end_day, start_time, end_time]):
+        if not start_day or not start_time or not end_time:
             continue
 
         try:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
-            duration_seconds = (end_dt - start_dt).total_seconds()
-
-            # For simplicity, attribute the entire period to the start day
-            # In a more sophisticated approach, we could split multi-day periods
-            if start_day not in daily_rest_mode:
-                daily_rest_mode[start_day] = {
-                    "count": 0,
-                    "total_duration": 0,
-                }
-
-            daily_rest_mode[start_day]["count"] += 1
-            daily_rest_mode[start_day]["total_duration"] += duration_seconds
-
-        except (ValueError, AttributeError) as e:
-            _LOGGER.debug("Error parsing rest mode period: %s", e)
+        except (ValueError, AttributeError):
             continue
 
-    # Create daily statistics
-    sensor_data = {
-        "daily_rest_mode_count": [],
-        "daily_rest_mode_duration": [],
-    }
+        day_stats = daily_stats.setdefault(start_day, {"count": 0.0, "duration_seconds": 0.0})
+        day_stats["count"] += 1
+        day_stats["duration_seconds"] += (end_dt - start_dt).total_seconds()
 
-    for day, stats in daily_rest_mode.items():
+    count_points = []
+    duration_points = []
+    for day, values in daily_stats.items():
         timestamp = _parse_date_to_timestamp(day)
         if not timestamp:
             continue
+        count_points.append({"timestamp": timestamp, "value": values["count"]})
+        if values["duration_seconds"] > 0:
+            duration_points.append({"timestamp": timestamp, "value": values["duration_seconds"] / 3600})
 
-        # Count of rest mode periods
-        sensor_data["daily_rest_mode_count"].append({
-            "timestamp": timestamp,
-            "value": stats["count"],
-        })
-
-        # Total duration in hours
-        duration_hours = stats["total_duration"] / 3600
-        if duration_hours > 0:
-            sensor_data["daily_rest_mode_duration"].append({
-                "timestamp": timestamp,
-                "value": duration_hours,
-            })
-
-    # Import statistics
-    for sensor_key, data_points in sensor_data.items():
-        if data_points:
-            await _create_statistic(hass, sensor_key, data_points, entry)
-            stats_count += len(data_points)
+    if count_points:
+        await _create_statistic(hass, "daily_rest_mode_count", count_points, entry)
+        stats_count += len(count_points)
+    if duration_points:
+        await _create_statistic(hass, "daily_rest_mode_duration", duration_points, entry)
+        stats_count += len(duration_points)
 
     return stats_count
-
-
-# Register tag processors
-CUSTOM_PROCESSORS["tag"] = _process_tag_statistics
-CUSTOM_PROCESSORS["enhanced_tag"] = _process_enhanced_tag_statistics
-CUSTOM_PROCESSORS["rest_mode"] = _process_rest_mode_statistics
-
-
-# Register heartrate processor
-CUSTOM_PROCESSORS["heartrate"] = _process_heartrate_statistics
 
 
 async def _create_statistic(
@@ -800,11 +651,17 @@ async def _create_statistic(
 
     # Create data points
     statistics = []
-    for point in data_points:
+    sorted_data_points = sorted(data_points, key=lambda point: point["timestamp"])
+    running_sum = 0.0
+    for point in sorted_data_points:
+        value = point["value"]
+        if metadata["has_sum"]:
+            running_sum += value
         stat_data = StatisticData(
             start=point["timestamp"],
-            mean=point["value"] if metadata["has_mean"] else None,
-            sum=point["value"] if metadata["has_sum"] else None,
+            state=value if metadata["has_sum"] else None,
+            mean=value if metadata["has_mean"] else None,
+            sum=running_sum if metadata["has_sum"] else None,
         )
         statistics.append(stat_data)
 

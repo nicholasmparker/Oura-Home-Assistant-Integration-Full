@@ -5,24 +5,26 @@
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/louispires/oura-v2-custom-component/validate.yml?logo=github&label=HASSFEST%20validate)](https://github.com/louispires/oura-v2-custom-component/actions/workflows/validate.yml)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Support-yellow.svg)](https://buymeacoffee.com/louispires)
 
-A modern Home Assistant custom integration for Oura Ring using the v2 API with OAuth2 authentication.
+A modern Home Assistant custom integration for Oura Ring using the v2 API with OAuth2 authentication. Supports all Oura Ring generations: **Gen 3**, **Ring 4**, and the new **Ring 5**.
 
 ## Features
 
+- **Oura Ring 5 Compatible**: Fully tested with all Oura Ring generations including the latest Oura Ring 5
 - **OAuth2 Authentication**: Secure authentication using Home Assistant's application credentials
-- **Comprehensive Data**: 49 sensors covering all Oura Ring metrics including sleep, readiness, activity, stress, resilience, and more
-- **HA 2025.11 Compliant**: Modern entity naming, translation keys, entity categories, and proper state classes
+- **Comprehensive Data**: 69 sensors and 2 binary sensors covering Oura Ring sleep, readiness, activity, workout, session, tags, rest mode, stress, resilience, battery, cardiovascular health, and more
+- **HA 2026 Compatible**: Modern entity naming, translation keys, entity categories, and proper state classes
 - **Historical Data Loading**: Automatically loads 3 months of historical data on first setup (configurable 1-48 months, up to 4 years)
+- **Expanded Daily Tracking**: Adds workout, mindfulness session, tag, and rest mode tracking with historical statistics support
 - **Entity Categories**: Diagnostic sensors properly categorized for better UI organization
 - **Multi-Account Support**: Entry-scoped unique IDs allow multiple Oura accounts
 - **HACS Compatible**: Easy installation and updates via HACS
 - **Modern Architecture**: Configuration-driven design following latest Home Assistant standards
-- **Comprehensive Testing**: 50 automated tests ensuring reliability
+- **Comprehensive Testing**: 106 automated tests ensuring reliability
 - **Efficient Updates**: Uses DataUpdateCoordinator with specialized processing methods
 
 ## Available Sensors
 
-### Sleep Sensors (16)
+### Sleep Sensors (17)
 - Sleep Score
 - Total Sleep Duration
 - Deep Sleep Duration
@@ -39,6 +41,9 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 - Bedtime Start (when you went to sleep)
 - Bedtime End (when you woke up)
 - Low Battery Alert
+- Sleep Analysis Reason (diagnostic: how sleep was detected — foreground app sync, background detection, or bedtime edit; Ring 5 supports background detection via API 1.35+)
+
+**Note**: Sleep Efficiency now uses the actual detailed sleep efficiency percentage from Oura sleep data rather than the contributor score.
 
 ### Readiness Sensors (5)
 - Readiness Score
@@ -49,23 +54,29 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 
 **Note**: Sensors marked with * may be unavailable if Oura doesn't have sufficient data to calculate the contributor score.
 
-### Activity Sensors (8)
+### Activity Sensors (11)
 - Activity Score
 - Steps
 - Active Calories
 - Total Calories
 - Target Calories
-- High Activity Time
-- Medium Activity Time
-- Low Activity Time
+- High Activity MET Minutes
+- Medium Activity MET Minutes
+- Low Activity MET Minutes
+- High Activity Time (actual duration in minutes)
+- Medium Activity Time (actual duration in minutes)
+- Low Activity Time (actual duration in minutes)
 
-### Heart Rate Sensors (6)
+### Heart Rate Sensors (7)
 - Current Heart Rate (latest reading)
-- Average Heart Rate (from recent readings)
-- Minimum Heart Rate (from recent readings)
-- Maximum Heart Rate (from recent readings)
+- Average Heart Rate (rolling 24-hour window)
+- Minimum Heart Rate (rolling 24-hour window)
+- Maximum Heart Rate (rolling 24-hour window)
+- Last Heart Rate Reading (timestamp of most recent reading, diagnostic)
 - Lowest Sleep Heart Rate (lowest heart rate during sleep)
 - Average Sleep Heart Rate (average heart rate during sleep)
+
+**Note**: Heart rate data reflects cloud-synced readings, not real-time Bluetooth readings from the Oura app. Use the "Last Heart Rate Reading" diagnostic sensor to verify data recency.
 
 ### HRV Sensors (1)
 - Average Sleep HRV (heart rate variability during sleep)
@@ -81,24 +92,53 @@ A modern Home Assistant custom integration for Oura Ring using the v2 API with O
 - Daytime Recovery Score ⚠️
 - Stress Resilience Score ⚠️
 
-### SpO2 Sensors (2) - *Gen3/Ring4 only*
+### SpO2 Sensors (2) - *Gen3, Ring 4, and Ring 5*
 - SpO2 Average
 - Breathing Disturbance Index
 
-### Fitness Sensors (2) - *May be unavailable for new rings*
+### Fitness Sensors (3) - *Requires Oura membership*
 - VO2 Max ⚠️
 - Cardiovascular Age ⚠️
+- Pulse Wave Velocity (arterial stiffness in m/s, API 1.35+) ⚠️
 
 ### Sleep Optimization Sensors (2) - *May be unavailable for new rings*
 - Optimal Bedtime Start ⚠️
 - Optimal Bedtime End ⚠️
 
-**Total: 49 sensors**
+### Workout Sensors (6)
+- Workouts Today
+- Last Workout Type
+- Last Workout Distance
+- Last Workout Calories
+- Last Workout Intensity
+- Last Workout Duration
+
+### Session Sensors (2)
+- Mindfulness Sessions Today
+- Meditation Duration Today
+
+### Tag Sensors (2)
+- Tags Today
+- Tag Count Today
+
+### Rest Mode Sensors (2)
+- Rest Mode Start
+- Rest Mode End
+
+### Ring Battery Sensors (1)
+- Ring Battery Level (current battery %, diagnostic)
+
+### Binary Sensors (2)
+- Rest Mode
+- Ring Charging
+
+**Total: 69 sensors + 2 binary sensors**
 
 **Important Notes**:
 - Sensors marked with ⚠️ may be **unavailable** for new Oura Ring users (typically the first few weeks of usage). The Oura API does not provide data for these sensors until sufficient baseline data has been collected. This is normal behavior and they may become available over time as you continue using your ring.
 - Some sensors marked with feature requirements may return 401 Unauthorized errors if your Oura account/ring doesn't have access to those features.
 - The integration will continue to work with all available sensors - unavailable sensors simply won't display values until Oura provides data for them.
+- Rest mode uses a dedicated binary sensor and exposes the active period metadata when Oura reports an active rest mode window.
 
 ## Installation
 
@@ -544,6 +584,155 @@ yaxis:
 ```
 </details>
 
+#### Workout Summary
+
+Track how many workouts you completed today plus details from your latest workout:
+<details>
+<summary>yaml</summary>
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Workout Summary
+  show_states: true
+graph_span: 7d
+span:
+  end: day
+series:
+  - entity: sensor.oura_ring_workouts_today
+    name: Workouts
+    color: "#1E88E5"
+    type: column
+    opacity: 0.75
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: count
+  - entity: sensor.oura_ring_last_workout_duration
+    name: Last Duration
+    color: "#43A047"
+    type: line
+    curve: smooth
+    stroke_width: 2
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: minutes
+  - entity: sensor.oura_ring_last_workout_calories
+    name: Last Calories
+    color: "#FB8C00"
+    type: line
+    curve: smooth
+    stroke_width: 2
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: calories
+yaxis:
+  - id: count
+    min: 0
+    apex_config:
+      tickAmount: 4
+      title:
+        text: Workouts
+  - id: minutes
+    opposite: true
+    min: 0
+    apex_config:
+      tickAmount: 4
+      title:
+        text: Minutes
+  - id: calories
+    opposite: true
+    show: false
+```
+</details>
+
+#### Mindfulness and Tags
+
+Visualize mindfulness sessions, meditation time, and daily tags together:
+<details>
+<summary>yaml</summary>
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Mindfulness and Tags
+  show_states: true
+graph_span: 14d
+span:
+  end: day
+series:
+  - entity: sensor.oura_ring_mindfulness_sessions_today
+    name: Sessions
+    color: "#8E24AA"
+    type: column
+    opacity: 0.75
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: sessions
+  - entity: sensor.oura_ring_meditation_duration_today
+    name: Meditation (min)
+    color: "#00897B"
+    type: line
+    curve: smooth
+    stroke_width: 2
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: minutes
+  - entity: sensor.oura_ring_tag_count_today
+    name: Tags
+    color: "#F4511E"
+    type: line
+    curve: smooth
+    stroke_width: 2
+    group_by:
+      func: last
+      duration: 1d
+    yaxis_id: tags
+yaxis:
+  - id: sessions
+    min: 0
+    apex_config:
+      tickAmount: 4
+      title:
+        text: Sessions
+  - id: minutes
+    opposite: true
+    min: 0
+    apex_config:
+      tickAmount: 4
+      title:
+        text: Minutes
+  - id: tags
+    opposite: true
+    show: false
+```
+</details>
+
+#### Rest Mode Card
+
+Show current rest mode status with the active window from Oura:
+<details>
+<summary>yaml</summary>
+
+```yaml
+type: entities
+title: Rest Mode
+entities:
+  - entity: binary_sensor.oura_ring_rest_mode
+    name: Rest Mode Active
+  - entity: sensor.oura_ring_rest_mode_start
+    name: Rest Mode Start
+  - entity: sensor.oura_ring_rest_mode_end
+    name: Rest Mode End
+```
+</details>
+
 #### Temperature Deviation
 
 Track body temperature trends:
@@ -619,6 +808,18 @@ entities:
   - entity: sensor.oura_ring_active_calories
     secondary_info: last-changed
     name: Active Calories
+  - entity: sensor.oura_ring_workouts_today
+    secondary_info: last-changed
+    name: Workouts Today
+  - entity: sensor.oura_ring_mindfulness_sessions_today
+    secondary_info: last-changed
+    name: Mindfulness Sessions
+  - entity: sensor.oura_ring_tag_count_today
+    secondary_info: last-changed
+    name: Tags Today
+  - entity: binary_sensor.oura_ring_rest_mode
+    secondary_info: last-changed
+    name: Rest Mode
   - entity: sensor.oura_ring_current_heart_rate
     secondary_info: last-changed
   - entity: sensor.oura_ring_average_heart_rate
@@ -729,15 +930,14 @@ If you see rate limiting errors:
 This integration is built using modern Home Assistant patterns:
 
 - **OAuth2 Flow**: Uses Home Assistant's built-in OAuth2 implementation
-- **DataUpdateCoordinator**: Efficient data fetching with 12 specialized processing methods
+- **DataUpdateCoordinator**: Efficient data fetching with 18 specialized processing methods
 - **Configuration-Driven Design**: Maintainable, declarative structures throughout
 - **Modern Entity Standards**: `has_entity_name=True`, translation keys, entity categories
 - **Entry-Scoped IDs**: Multi-account support with proper unique ID scoping
 - **Type Hints**: Full type hint coverage for better code quality
 - **Async**: All operations are asynchronous
 - **Error Handling**: Comprehensive error handling and clean logging
-- **Test Coverage**: 45 automated tests with comprehensive fixtures
-- **Code Efficiency**: 51.5% code reduction in statistics module through refactoring
+- **Test Coverage**: 106 automated tests with comprehensive fixtures
 
 ## Contributing
 
@@ -751,6 +951,30 @@ Contributions are welcome! Please read our [Contributing Guide](docs/CONTRIBUTIN
 - **[Redirect URI Fix](docs/FIXING_REDIRECT_URI.md)** - OAuth redirect URI troubleshooting
 - **[Project Summary](docs/PROJECT_SUMMARY.md)** - Technical overview and architecture
 
+## Privacy & Data
+
+### What data is stored and where
+
+All Oura health data fetched by this integration is stored **locally in your Home Assistant instance only** — on your own hardware. No data is forwarded to any third-party service by this integration.
+
+- **Live sensor values** are held in Home Assistant's state machine (in memory).
+- **Historical statistics** (if enabled on first setup) are stored in Home Assistant's long-term statistics database, typically `home-assistant_v2.db` in your config directory.
+
+### Revoking access
+
+You can stop this integration from accessing your Oura data at any time by revoking the OAuth connection:
+
+1. **Revoke in Oura** — go to [Oura Cloud](https://cloud.ouraring.com) → Account → Connected Apps and remove the Home Assistant application. This immediately prevents any further API calls.
+2. **Remove in Home Assistant** — go to **Settings → Devices & Services → Oura Ring → Delete**. This removes the integration entry and its associated entities.
+
+> **Note:** Per [Oura's Privacy Policy](https://ouraring.com/privacy-policy), revoking OAuth access prevents *future* data transfers but does not automatically delete data that has already been received by a third party. If you want a complete removal, delete the integration entry in Home Assistant (step 2 above) after revoking — this clears all locally stored sensor history and long-term statistics associated with the integration.
+
+### Oura's Privacy Policy
+
+This integration accesses your personal health data using Oura's official v2 API under the permissions you grant during OAuth setup. Oura does not sell or rent personal data. For full details on how Oura handles your data, see the [Oura Privacy Policy](https://ouraring.com/privacy-policy). Questions about your Oura account data can be directed to [dataprotection@ouraring.com](mailto:dataprotection@ouraring.com).
+
+---
+
 ## License
 
 This project is licensed under the MIT License.
@@ -759,9 +983,9 @@ This project is licensed under the MIT License.
 
 - Original Oura Component: [nitobuendia/oura-custom-component](https://github.com/nitobuendia/oura-custom-component)
 - Oura Ring API: [Oura Cloud API Documentation](https://cloud.ouraring.com/v2/docs)
-- v2.0.0 Modernization: Comprehensive refactoring to HA 2025.11 standards
-- Test Infrastructure: Docker-based testing with 45 automated tests
-- Development assisted by: Claude Sonnet 4.5 (Anthropic AI)
+- v2.0.0 Modernization: Comprehensive refactoring to HA 2026 standards
+- Test Infrastructure: Docker-based testing with 106 automated tests
+- Development assisted by: Claude Sonnet 4.6 (Anthropic AI)
 
 ## Sponsoring
 

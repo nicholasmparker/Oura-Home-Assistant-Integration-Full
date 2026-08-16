@@ -1,4 +1,384 @@
-﻿# 🎉 Oura Ring v2 Integration v2.5.1 - Data Verification & Sleep Regularity
+﻿# Oura Ring v2 Integration v2.8.7
+
+## 🐛 BUG FIXES IN v2.8.7
+
+### Initial OAuth setup now works for new-portal apps (401 on authorization_code exchange)
+
+- **Fixed**: Apps registered on [developer.ouraring.com](https://developer.ouraring.com) could not complete initial setup at all — the config flow aborted with `oauth_unauthorized` ([#71](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/71)).
+- **Root cause**: The v2.8.6 fallback only retried the new-portal endpoint on the errors seen during **token refresh**. The **initial** authorization_code exchange against the legacy `https://api.ouraring.com/oauth/token` endpoint is rejected with a `401`, and depending on the Home Assistant version this can surface as a plain `aiohttp.ClientResponseError` rather than the `OAuth2TokenRequestReauthError` the old handler expected — so the fallback never triggered and setup failed outright.
+- **Fix**: `OuraOAuth2Implementation._token_request` now catches `aiohttp.ClientResponseError` directly (which `OAuth2TokenRequestReauthError` is a subclass of) and retries against the new-portal endpoint for both `400` and `401` responses, covering the refresh path and the initial code exchange alike. Any other status (e.g. `429`/`5xx`) is left untouched and propagates as before.
+
+### MET-minutes historical statistics unit mismatch fixed
+
+- **Fixed**: `met_min_high`, `met_min_medium`, and `met_min_low` declared `unit: "min"` in statistics metadata while their live sensors are unitless (MET·min is a load quantity, not a duration), causing a recurring `units_changed` repair, recorder warnings on every 5-minute compile, and suppressed long-term statistics for these three sensors ([#70](https://github.com/louispires/Oura-Home-Assistant-Integration/pull/70), thanks @mnestrud).
+- **Fix**: `STATISTICS_METADATA` now declares `unit: None` for all three MET-minute sensors, matching `const.py`. Recorder metadata converges with the live sensors and long-term statistics resume.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ Full Docker suite passing
+- ✅ New/updated tests in `test_application_credentials.py`:
+  - `test_legacy_401_retries_fallback_and_succeeds` — initial code exchange 401 → retry against fallback → success, `token_url` updated.
+  - `test_non_fallback_status_propagates_without_retry` — a non-400/401 status (e.g. 500) is not retried.
+
+---
+
+# Oura Ring v2 Integration v2.8.6
+
+## 🐛 BUG FIX IN v2.8.6
+
+### Token refresh now works for apps registered on the new Oura developer portal
+
+- **Fixed**: Apps registered on the new [developer.ouraring.com](https://developer.ouraring.com) portal fail every token refresh against the legacy `https://api.ouraring.com/oauth/token` endpoint with `400 invalid_request`, causing all 18 endpoints to fail simultaneously on every update cycle ([#68](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/68), root cause of [#61](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/61) / [#54](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/54)).
+- **Fix**: A custom `OuraOAuth2Implementation` now tries the legacy endpoint first; on a `400` rejection it transparently retries against `https://moi.ouraring.com/oauth/v2/ext/oauth-token` (the new-portal endpoint) and updates `token_url` permanently for that session so all subsequent refreshes go directly there. Apps registered on the legacy portal are unaffected — they succeed on the first attempt and the fallback never fires.
+
+**Why a fallback rather than a hard switch**: the new endpoint is undocumented and has not been confirmed to accept legacy-portal credentials. The fallback strategy keeps both old and new portal users working without requiring a re-registration or any user action.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ Full Docker suite passing: **123 tests passed**
+- ✅ New tests added for all fallback paths:
+  - `test_legacy_success_no_fallback` — legacy endpoint succeeds, `token_url` unchanged.
+  - `test_legacy_400_retries_fallback_and_succeeds` — legacy 400 → retry against new endpoint → success, `token_url` updated.
+  - `test_fallback_400_propagates_reauth_error` — both endpoints 400 → `OAuth2TokenRequestReauthError` propagates to coordinator → reauthentication prompt appears in HA UI.
+  - `test_second_call_goes_directly_to_fallback` — after the switch, subsequent calls use the fallback directly with no extra retry.
+
+---
+
+# Oura Ring v2 Integration v2.8.5
+
+## 🐛 BUG FIXES IN v2.8.5
+
+### Heart rate endpoint now properly triggers reauthentication on rejected refresh token
+
+- **Fixed**: A rejected OAuth refresh token (`OAuth2TokenRequestReauthError`) in the heart-rate endpoint could be absorbed as an ordinary endpoint outage instead of propagating to Home Assistant reauth handling ([#66](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/66), [#67](https://github.com/louispires/Oura-Home-Assistant-Integration/pull/67)).
+- **Fix**: Reauth exceptions are now explicitly re-raised from both heart-rate fetch paths (batched and non-batched), allowing the coordinator to raise `ConfigEntryAuthFailed` and surface Home Assistant's reauthentication flow.
+
+### Heart-rate outages are now included in endpoint failure connectivity counts
+
+- **Fixed**: When the heart-rate endpoint failed with non-auth errors, it returned fallback data and was omitted from `failed_endpoints` warning counts, causing underreported values like `17/18` during broad outages.
+- **Fix**: Heart-rate fetch fallback behavior is preserved for data-shape stability, but absorbed heart-rate outages are now flagged internally and counted in aggregate connectivity warnings.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ Full Docker suite passing: **119 tests passed**
+- ✅ Added focused coverage for:
+  - reauth propagation from batched heart-rate fetch
+  - reauth propagation from short-range heart-rate fetch
+  - preserved fallback behavior for non-auth heart-rate failures
+  - aggregate outage counting that now includes absorbed heart-rate failures
+
+---
+
+# Oura Ring v2 Integration v2.8.4
+
+## 🐛 BUG FIX IN v2.8.4
+
+### Integration no longer prompts to reauthenticate when OAuth token refresh is rejected
+
+- **Fixed**: When Oura's token endpoint rejects a refresh token (HTTP 400), the integration was silently re-serving stale cached data forever instead of surfacing HA's "Reauthenticate" prompt ([#61](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/61), [#64](https://github.com/louispires/Oura-Home-Assistant-Integration/pull/64)).
+
+**Root cause (two-layer bug)**:
+1. `asyncio.gather(..., return_exceptions=True)` in `api.py` swallowed `OAuth2TokenRequestReauthError` the same as any ordinary per-endpoint failure — logging it at DEBUG and substituting empty data — so it never reached `coordinator.py` at all.
+2. Even if it had reached the coordinator, the blanket `except Exception` handler there would have taken the `if self.data: return self.data` branch (silently treating the update as successful) rather than raising `ConfigEntryAuthFailed`.
+
+**Fix**: `api.py` now scans gathered results for `OAuth2TokenRequestReauthError` and re-raises it before the per-endpoint swallow loop. `coordinator.py` catches it specifically and raises `ConfigEntryAuthFailed`, which triggers HA's reauth UI. All other exception handling (network errors, 401s on optional/scope-limited endpoints) is unchanged.
+
+**Confirmed**: The fix was validated by an affected user — the "Reauthenticate" prompt appeared on the next update cycle and completing the flow restored the integration ([#61](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/61)).
+
+## ✨ NEW IN v2.8.4
+
+### `workouts_today` sensor now exposes today's full workout list as an attribute
+
+- **New attribute** `workouts` on `sensor.oura_ring_workouts_today`: the complete list of today's workouts as returned by the Oura API, including `activity`, `day`, `start_datetime`, `end_datetime`, `intensity`, `source`, and (when present) `label`, `calories`, and `distance` ([#63](https://github.com/louispires/Oura-Home-Assistant-Integration/pull/63)).
+- The sensor **state** (count) is unchanged.
+- Resets to an empty list when no workouts are recorded for today, consistent with the count resetting to 0.
+- Follows the existing `_last_workout_raw` / `workout` attribute pattern used by `last_workout_*` sensors, and the `_tags_today_list` / `tags` pattern on `tags_today`.
+- **Use case**: automations and dashboards that need to distinguish between multiple workouts in a day (e.g. a strength session followed by a ride) can now read the full list rather than just the count or the most recent entry.
+
+## 📄 DOCUMENTATION IN v2.8.4
+
+### Redirect URI setup instructions corrected ([#62](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/62))
+
+- `docs/INSTALLATION.md` Step 2 previously told users to register their own HA URL (`https://your-ha.../auth/external/callback`) as the Oura Redirect URI. This integration always sends `https://my.home-assistant.io/redirect/oauth` unconditionally — the previous instructions were both wrong and, for plain `http://` local IPs, not even accepted by Oura's developer portal.
+- `docs/FIXING_REDIRECT_URI.md` previously described the relay as conditional on how you access HA, and offered a confusing two-URI "Option A/B". Rewritten to state the behaviour correctly and removed the stale "Alternative: Access HA Directly" section.
+- The "OAuth Error: Invalid Redirect URI" troubleshooting entry in `INSTALLATION.md` updated to give a direct, correct answer.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ 113 automated tests passing (up from 108 in v2.8.3)
+- ✅ New tests: `test_process_workout_multiple_today`, `test_process_workout_none_today`, `test_workouts_today_sensor_exposes_workout_list`, `test_workouts_attribute_not_on_other_sensors`, `test_workouts_today_sensor_without_list`
+
+---
+
+# 🐛 Oura Ring v2 Integration v2.8.3 - Show Most Recently Set Up Ring
+
+## 🐛 BUG FIX IN v2.8.3
+
+### Device info shows old ring model/firmware after upgrading to a new ring
+
+- **Fixed**: When a user has multiple ring configurations in their Oura account history (e.g. upgraded from a Gen 3 to an Oura Ring 5), the integration was showing the model and firmware version of an older ring instead of the currently active one ([#60](https://github.com/louispires/Oura-Home-Assistant-Integration/pull/60)).
+
+**Root cause**: Oura's `/ring_configuration` API returns all rings ever set up on the account, not just the current one. The coordinator was taking the first entry in the response list (`ring_config_data[0]`), which is the oldest ring — not necessarily the one in active use.
+
+**Fix**: The coordinator now picks the ring with the **most recent `set_up_at` UTC timestamp**, which is always the currently active ring. Rings without a `set_up_at` value (older API records) fall back safely to the lowest possible timestamp so they are never selected over a ring with a known setup date.
+
+**Robustness improvement**: `_parse_iso_datetime` now always returns a UTC-aware `datetime`, safely normalising naive timestamps that could cause a `TypeError` when mixed with UTC-aware fallback values in the `max()` comparison.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ 108 automated tests passing
+- ✅ New tests: `test_most_recent_config_used_for_multiple_rings` (order-independent, parametrized), `test_first_config_used_when_setup_timestamps_missing` (no-timestamp fallback), `test_naive_timestamp_beats_missing_timestamp` (naive datetime edge case)
+- ✅ Fixed async test infrastructure: replaced `pytest-asyncio` with `anyio` for Python 3.14 / pytest 9 compatibility
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.8.2 - Oura API v1.35 + Bedtime Fix
+
+## ✨ NEW IN v2.8.2
+
+### Oura API v1.35 Support
+
+**New sensor: Sleep Analysis Reason** (`sleep_analysis_reason`)
+
+- Exposes how Oura detected your sleep session: `foreground_sleep_analysis` (app sync), `background_sleep_analysis` (Ring 5 passive detection), `bedtime_edit` (manually adjusted), or `background_created_foreground_updated`.
+- **Entity category**: Diagnostic.
+- **Ring 5 note**: Background sleep analysis (new in API 1.35) allows the Ring 5 to detect and record sleep without requiring an Oura app sync first.
+
+**Ring hardware type display names**
+
+- `or5` hardware type now correctly displays as **"Oura Ring 5"** (previously rendered as "Oura Ring Or5" due to a `.capitalize()` bug).
+- `gen4` now displays as **"Oura Ring 4"** (was "Oura Ring Gen4").
+- Gen 1–3 now display with proper spacing (e.g., "Oura Ring Gen 3").
+- All known hardware types are handled via a lookup dict (`RING_MODEL_NAMES` in `const.py`); unknown future types fall back gracefully.
+
+**New ring color: `deep_rose`**
+
+- Added to the Oura Ring color enum in API 1.35. No code changes required — ring colors are passed through dynamically and are not validated by the integration.
+
+## 🐛 BUG FIX IN v2.8.2
+
+### Bedtime End shows afternoon/evening value just after midnight
+
+- **Fixed**: `sensor.oura_ring_bedtime_end` momentarily showing an incorrect afternoon or evening time (e.g., 17:14, 21:04, 18:04) just after midnight (~00:00:30) before correcting itself hours later to the proper morning wake-up time.
+
+**Root cause**: Oura's `/sleep` API can return multiple completed sleep records for the same `day` — for example, the main overnight sleep (ending ≈08:30) alongside an afternoon nap or brief rest session (ending ≈17:00 or later). The coordinator sorts records by `day` to pick the most recent, but when two records share the same `day` value Python's stable sort preserves the original API response order. If the API returned the shorter nap record last, `[-1]` selected it — causing the wrong `bedtime_end` to display.
+
+**Fix**: Added `total_sleep_duration` as a secondary sort key. Within the same calendar day, the record with the **longest duration** (the overnight sleep) is now always sorted last and selected. A new test (`test_bedtime_prefers_longest_sleep_for_same_day`) verifies this behaviour.
+
+## 📊 ENTITY COUNT UPDATE
+
+- **Previous version**: 68 sensors + 2 binary sensors
+- **This version**: 69 sensors + 2 binary sensors (+1 Sleep Analysis Reason diagnostic sensor)
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ 106 automated tests passing (106, up from 105)
+- ✅ New test: `test_bedtime_prefers_longest_sleep_for_same_day`
+
+---
+
+# 🛠️ Oura Ring v2 Integration v2.8.1 - Current Heart Rate Freshness Fix
+
+## 🐛 BUG FIX IN v2.8.1
+
+### Current Heart Rate stuck on old data
+
+- **Fixed**: `sensor.oura_ring_current_heart_rate` showing a reading from the previous day instead of the most recent synced value (resolves [#57](https://github.com/louispires/Oura-Home-Assistant-Integration/issues/57)).
+- **Fixed**: `sensor.oura_ring_heart_rate_timestamp` not advancing throughout the day.
+- `sensor.oura_ring_average_heart_rate`, `min_heart_rate`, and `max_heart_rate` were unaffected by this bug.
+
+**Root cause**: The Oura heart rate API is paginated (oldest-first). The integration never followed the `next_token` links, so it only consumed the first page of results — which contained readings from the beginning of the time window (prior day), not the most recent ones. Data visible in the Oura app was present in the API but unreachable beyond page 1.
+
+**Fix**: Added `_async_get_all_pages()` helper in `api.py` that follows `next_token` pagination until all pages are consumed. `_async_get_heartrate()` now uses this helper for both regular and batched (>30-day) fetches.
+
+**Verification**: A new `tests/live_heartrate_test.py` script lets you confirm freshness against your real Oura account using a Personal Access Token — run it any time to check data lag and page count.
+
+---
+
+# 🛠️ Oura Ring v2 Integration v2.7.1 - Bedtime Sensor Stability Fix
+
+## 🐛 BUG FIXES IN v2.7.1
+
+### Bedtime Start / End Sensor Stability
+
+- **Fixed**: `sensor.oura_bedtime_start` and `sensor.oura_bedtime_end` going **Unknown** after midnight until morning ring sync (affects all ring generations).
+- **Fixed**: Bedtime Start showing random/incorrect values during active sleep tracking on some Gen 3 devices ([#49](https://github.com/louispires/oura-v2-custom-component/issues/49)).
+
+**Root cause**: Oura's `/sleep` API returns in-progress sleep records during active sleep tracking with `bedtime_end = null`. The integration was selecting the last record in the response array, which after midnight is the in-progress record for the current night rather than the completed sleep record.
+
+**Fix**:
+- Coordinator now filters for **completed** sleep records (both `bedtime_start` and `bedtime_end` present) before selecting the latest.
+- Prefers `long_sleep` type (main overnight sleep >3h) over naps when multiple completed records exist for the same day.
+- When no completed record is available (ring not yet synced after midnight), **preserves the last known bedtime values** rather than going Unknown.
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.7.0 - Ring Battery Level & Device Info Enrichment
+
+This release adds battery monitoring for your Oura Ring via the new Oura API v1.29 endpoints.
+
+## ✨ FEATURES IN v2.7.0
+
+### New Ring Battery Level Sensor
+
+- **New sensor**: `ring_battery_level` — shows current ring battery percentage (0–100%).
+- **Device class**: `battery` — HA automatically renders the appropriate icon and colour.
+- **Entity category**: Diagnostic (grouped under device diagnostics, not cluttering the main dashboard).
+- **Data source**: New Oura API 1.29 `/v2/usercollection/ring_battery_level` endpoint, fetched with `?latest=true` for efficiency.
+
+### New Ring Charging Binary Sensor
+
+- **New binary sensor**: `ring_charging` — `on` when the ring is in the charger and charging.
+- **Device class**: `battery_charging` — automatable (e.g. notifications when charging starts/stops).
+- **Data source**: Same battery level endpoint — uses the `charging` field from the latest reading.
+
+### Device Info Enrichment from Ring Configuration
+
+- **Model** in HA device registry now shows ring generation (e.g. `Oura Ring Gen4`, `Oura Ring Gen3`).
+- **Firmware version** is now displayed as software version in the HA device card.
+- **Data source**: Existing `/v2/usercollection/ring_configuration` endpoint — no new OAuth scope required.
+- Falls back gracefully to `Oura Ring` when configuration data is unavailable.
+
+## 📊 ENTITY COUNT UPDATE
+
+- **Previous version**: 61 sensors + 1 binary sensor
+- **This version**: 62 sensors + 2 binary sensors
+
+## 🔧 TECHNICAL IMPROVEMENTS
+
+- Extended API fan-out with two new endpoint methods: `_async_get_ring_battery_level` and `_async_get_ring_configuration`.
+- Both new endpoints handle 401/404 gracefully and return empty data (consistent with other optional endpoints).
+- `device_info` in `sensor.py` and `binary_sensor.py` now dynamically reflects ring hardware from coordinator data.
+- Shared `_oura_device_info()` helper in `binary_sensor.py` eliminates duplication between binary sensor entities.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ Full Docker test suite passing in Home Assistant test environment.
+- ✅ 83 automated tests passing.
+- ✅ 28 new tests added covering:
+  - Ring battery coordinator processing (all edge cases)
+  - Ring configuration extraction
+  - API error handling (401/404 → empty data)
+  - Binary sensor availability and `is_on` logic
+  - Device info enrichment (model + firmware version)
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.6.0 - Workout, Session, Tags & Rest Mode
+
+This release introduces the first major post-v2.5.2 feature expansion with new workout/session tracking, tags and rest mode entities, and a sleep efficiency data correctness fix.
+
+## ✨ FEATURES IN v2.6.0
+
+### Sleep Efficiency Correctness Fix
+
+- **Correct source field**: `sleep_efficiency` now comes from detailed sleep data (`sleep_detail.efficiency`) instead of readiness/sleep contributor score fields.
+- **Live + historical consistency**: both coordinator processing and long-term statistics import now use the same value source.
+- **User impact**: Sleep Efficiency better matches Oura app percentage values.
+
+### New Workout Sensors
+
+- **New sensors (6)**:
+  - `workouts_today`
+  - `last_workout_type`
+  - `last_workout_distance`
+  - `last_workout_calories`
+  - `last_workout_intensity`
+  - `last_workout_duration`
+- **Data source**: Oura `workout` endpoint.
+- **Historical statistics**: added daily aggregate imports for workout count, distance, calories, and duration.
+
+### New Session Sensors
+
+- **New sensors (2)**:
+  - `mindfulness_sessions_today`
+  - `meditation_duration_today`
+- **Data source**: Oura `session` endpoint.
+- **Historical statistics**: added daily aggregate imports for mindfulness session count and meditation duration.
+
+### New Tag Sensors
+
+- **New sensors (2)**:
+  - `tags_today`
+  - `tag_count_today`
+- **Data sources**: Oura `tag` and `enhanced_tag` endpoints.
+- **Attributes**: bounded enriched tag metadata is exposed on `tags_today` for easier dashboard and automation use.
+- **Historical statistics**: added daily tag count from enhanced tag data.
+
+### New Rest Mode Entities
+
+- **New sensors (2)**:
+  - `rest_mode_start`
+  - `rest_mode_end`
+- **New binary sensor (1)**:
+  - `rest_mode`
+- **Data source**: Oura `rest_mode_period` endpoint.
+- **Behavior**: binary sensor reflects active rest mode state and exposes active period metadata attributes.
+- **Historical statistics**: added daily rest mode period count and duration imports.
+
+## 📊 ENTITY COUNT UPDATE
+
+- **Previous version**: 49 sensors
+- **This version**: 61 sensors + 1 binary sensor
+
+## 🔧 TECHNICAL IMPROVEMENTS
+
+- Extended API fan-out to include workout, session, tag, enhanced_tag, and rest_mode endpoints.
+- Added first binary sensor platform registration and setup for the integration.
+- Extended statistics metadata and processors for new daily aggregates.
+- Added translation keys for newly introduced entities, including non-English translation files.
+- Updated README and project summary docs to reflect the expanded entity set and corrected sleep efficiency behavior.
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ Full Docker test suite passing in Home Assistant test environment.
+- ✅ 61 automated tests passing.
+- ✅ Added and updated tests for:
+  - sleep efficiency source alignment
+  - workout/session processing
+  - tags and enhanced tag processing
+  - rest mode state and binary sensor behavior
+  - expanded API endpoint coverage and fixtures
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.5.2 - Timezone & Historical Statistics Fixes
+
+This release combines PR #45 and PR #47 into a single patch release focused on correct current-day data and reliable historical statistics backfill - Thank you @issmirnov
+
+## 🐛 FIXES IN v2.5.2
+
+### Sensors now show today's data in the configured Home Assistant timezone
+
+- **Timezone-aware date window**: Daily fetches now use `hass.config.time_zone` instead of server-local UTC time
+- **Exclusive end_date fix**: API requests now include `today + 1 day` so Oura's exclusive `end_date` behavior does not drop the current day
+- **User impact**: Daily sensors no longer lag by one day on Home Assistant OS and other UTC-hosted installs
+
+### Historical statistics charts render correctly
+
+- **Metadata alignment**: Duration and cumulative sensors now publish `sum` statistics instead of `mean` when their entity `state_class` is `total` or `total_increasing`
+- **Cumulative totals**: Imported `StatisticData.sum` values are now emitted as running totals instead of isolated daily values
+- **User impact**: Home Assistant history and statistics charts can render these backfilled sensors correctly
+
+### Historical backfill uses corrected Oura API paths
+
+- **Resilience backfill**: Fixed `sleep_recovery_score`, `daytime_recovery_score`, and `stress_resilience_score` paths
+- **Stress backfill**: Fixed stress and recovery duration keys and converted them from seconds to minutes during import
+- **SpO2 backfill**: Fixed `spo2_average` to use the nested `spo2_percentage.average` field
+- **Readiness backfill**: Added `sleep_regularity` historical import support
+- **Cardiovascular Age**: Corrected the backfill field to use `vascular_age`
+- **Sleep Time backfill**: Removed broken `sleep_time` backfill from the generic importer because it requires a dedicated transform that live data already handles correctly
+
+## 🧪 TESTING & VALIDATION
+
+- ✅ 53 automated tests passing in the Home Assistant Docker test environment
+- ✅ Added timezone-aware date window coverage
+- ✅ Added statistics metadata alignment coverage
+- ✅ Added cumulative sum coverage for imported statistics
+
+---
+
+# 🎉 Oura Ring v2 Integration v2.5.1 - Data Verification & Sleep Regularity
 
 This release adds data verification attributes and a new Sleep Regularity sensor from the latest Oura API update.
 

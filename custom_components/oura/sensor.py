@@ -9,7 +9,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import ATTRIBUTION, DOMAIN, SENSOR_TYPES
+from .const import ATTRIBUTION, DOMAIN, RING_MODEL_NAMES, SENSOR_TYPES
 from .coordinator import OuraDataUpdateCoordinator
 
 
@@ -60,11 +60,18 @@ class OuraSensor(CoordinatorEntity[OuraDataUpdateCoordinator], SensorEntity):
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information about this Oura Ring."""
+        model = "Oura Ring"
+        sw_version = None
+        if self.coordinator.data:
+            if hw_type := self.coordinator.data.get("ring_hardware_type"):
+                model = f"Oura Ring {RING_MODEL_NAMES.get(hw_type, hw_type.capitalize())}"
+            sw_version = self.coordinator.data.get("ring_firmware_version")
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.entry.entry_id)},
             name="Oura Ring",
             manufacturer="Oura",
-            model="Oura Ring",
+            model=model,
+            sw_version=sw_version,
             entry_type=DeviceEntryType.SERVICE,
         )
 
@@ -74,7 +81,7 @@ class OuraSensor(CoordinatorEntity[OuraDataUpdateCoordinator], SensorEntity):
         return self.coordinator.data.get(self._sensor_type)
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
+    def extra_state_attributes(self) -> dict[str, object] | None:
         """Return extra state attributes.
 
         Includes the data_date to show which day's data is being displayed.
@@ -128,6 +135,11 @@ class OuraSensor(CoordinatorEntity[OuraDataUpdateCoordinator], SensorEntity):
                 if end_day := rest_mode_raw.get("end_day"):
                     attrs["end_day"] = end_day
 
+
+        # Include the full day's workout list (upstream #63)
+        if self._sensor_type == "workouts_today" and self.coordinator.data:
+            if workouts_list := self.coordinator.data.get("_workouts_today_list"):
+                attrs["workouts"] = workouts_list
         return attrs if attrs else None
 
     @property
